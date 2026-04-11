@@ -1,0 +1,6 @@
+# ローカル秘密情報を AI のコンテキストに載せない（会話ログへの混入を防ぐ）
+# .env.example はマッチさせない（テンプレは読んでもよい）
+**/.env.local
+**/.env.*.local
+**/.env
+**/serviceAccount*.json
