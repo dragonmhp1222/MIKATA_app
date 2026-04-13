@@ -14,7 +14,7 @@ function readWebConfig() {
   // 必須4項目が揃っているか確認する。
   if (!apiKey || !authDomain || !projectId || !appId) {
     throw new Error(
-      "Firebase クライアント用の NEXT_PUBLIC_FIREBASE_* が1つでも空です。web/.env.local に4項目を入れ、npm run dev を一度止めて再起動してください（起動中に .env.local を編集しても反映されません）。"
+      "Firebase クライアント用の NEXT_PUBLIC_FIREBASE_* が1つでも空です。ローカル: web/.env.local に4項目を入れ、npm run dev を止めて再起動。本番(Vercel): Project → Settings → Environment Variables に NEXT_PUBLIC_FIREBASE_API_KEY / AUTH_DOMAIN / PROJECT_ID / APP_ID を Production 向けで設定し、保存後に Redeploy（.env.local は本番ビルドでは使われません）。"
     );
   }
   // Firebase JS SDK 向け設定オブジェクトを返す。

@@ -6,6 +6,10 @@ import { checkAndConsumeFreeQuota } from "@/lib/free-limit";
 import { buildSystemPrompt, buildUserPrompt } from "@/lib/prompt";
 import { aiOutputSchema, generateInputSchema } from "@/lib/schema";
 
+// 秒数はリテラル必須（Next の静的解析）。`@/lib/generate-limits` の GENERATE_SERVER_MAX_DURATION_SEC と同じにすること。
+// クライアントの fetch タイムアウトより長くする（短いと 504 HTML が先に返る）。
+export const maxDuration = 120;
+
 // OpenAIクライアントを必要時に生成してビルド時評価を避ける。
 function getOpenAiClient() {
   // APIキーを読む。
@@ -31,6 +35,18 @@ function getBearerToken(req: Request): string | null {
 // 生成APIのPOSTハンドラ。
 export async function POST(req: Request) {
   try {
+    // 本番で未設定だと OpenAI 呼び出しで落ちるため、早めに明示的に返す。
+    if (!process.env.OPENAI_API_KEY?.trim()) {
+      return NextResponse.json(
+        {
+          error: "OPENAI_NOT_CONFIGURED",
+          message:
+            "OPENAI_API_KEY が設定されていません。Vercel の Environment Variables（Production）を確認してください。",
+        },
+        { status: 503 }
+      );
+    }
+
     // IDトークンを取得する。
     const idToken = getBearerToken(req);
     // 無ければ未認証として拒否する。
@@ -100,6 +116,16 @@ export async function POST(req: Request) {
 
     // 文字列出力を取得する。
     const rawText = response.output_text;
+    if (!rawText?.trim()) {
+      return NextResponse.json(
+        {
+          error: "EMPTY_AI_OUTPUT",
+          message:
+            "AIからの応答が空でした。しばらく待ってから再度お試しください。",
+        },
+        { status: 502 }
+      );
+    }
     // JSONとして解析する。
     const rawJson = JSON.parse(rawText);
     // 出力契約を検証する。
@@ -137,6 +163,11 @@ export async function POST(req: Request) {
       ai_output: output,
     });
   } catch (error) {
+    // ユーザー文面はログに出さず、原因調査用にメッセージのみ（Vercel の Functions ログで確認可能）。
+    console.error(
+      "[api/generate]",
+      error instanceof Error ? error.message : String(error)
+    );
     // Firebase のトークン不正は 401 で返す。
     const code =
       typeof error === "object" && error !== null && "code" in error

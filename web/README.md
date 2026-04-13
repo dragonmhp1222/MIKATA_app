@@ -3,7 +3,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 ## MIKATA 向けセットアップ
 
 1. `cp .env.example .env.local` を実行する。
-2. OpenAI / Firebase Admin / `NEXT_PUBLIC_FIREBASE_*` を `.env.local` に記入する。
+2. OpenAI / `FIREBASE_SERVICE_ACCOUNT_JSON` / `NEXT_PUBLIC_FIREBASE_*` を `.env.local` に記入する。
 3. Firebase Console → Authentication → Sign-in method で **Google** を有効化する。
 4. Authentication → Settings → Authorized domains に **`localhost`**（開発用）が含まれることを確認する。
 5. Firestore のセキュリティルールは `firestore.rules` を参考にデプロイする（本番前に必ず確認）。

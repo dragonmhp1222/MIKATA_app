@@ -2,6 +2,7 @@
 
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
 import { useEffect, useMemo, useState } from "react";
+import { GENERATE_CLIENT_TIMEOUT_MS } from "@/lib/generate-limits";
 import { getFirebaseAuth } from "@/lib/firebase-client";
 
 // 画面で扱うシーン型を固定する。
@@ -73,11 +74,17 @@ export default function AppPage() {
       // ログイン状態の変化を監視する。
       unsubscribe = onAuthStateChanged(auth, (nextUser) => setUser(nextUser));
     } catch (e) {
-      // 実際のエラー内容を出す（NEXT_PUBLIC が未反映のときは再起動で直ることが多い）。
+      // 実際のエラー内容を出す。ホストに応じてローカル向け・本番向けの追記を分ける。
       const detail = e instanceof Error ? e.message : String(e);
-      setAuthInitError(
-        `${detail} — .env.local を変えたあと必ず dev サーバー（npm run dev）を一度止めて再起動してください。`
-      );
+      const host = window.location.hostname;
+      const isLocalDev =
+        host === "localhost" ||
+        host === "127.0.0.1" ||
+        host === "[::1]";
+      const tail = isLocalDev
+        ? ".env.local を変えたあと必ず dev（npm run dev）を一度止めて再起動してください。"
+        : "本番では Vercel の Environment Variables（Production）に NEXT_PUBLIC_FIREBASE_* 4つを入れ、Redeploy してください。.env.local はデプロイに含まれません。";
+      setAuthInitError(`${detail} — ${tail}`);
     }
     // アンマウント時に購読を解除する。
     return () => unsubscribe?.();
@@ -128,28 +135,43 @@ export default function AppPage() {
     try {
       // 最新の ID トークンを取得する。
       const idToken = await user.getIdToken();
-      // APIへPOST送信する。
-      const response = await fetch("/api/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({
-          // シーンIDを送る。
-          scene_id: sceneId,
-          // 生入力メモを送る。
-          raw_note: rawNote,
-          // 上司セリフを送る。
-          manager_quote: managerQuote,
-          // 自分返答を送る。
-          self_response: selfResponse,
-        }),
-      });
-      // エラーレスポンス時は内容を表示する。
+      // サーバーレス＋AI の待ちが長いとき用に打ち切り（秒表示で案内する）。
+      const controller = new AbortController();
+      const timeoutMs = GENERATE_CLIENT_TIMEOUT_MS;
+      const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+      let response: Response;
+      try {
+        // APIへPOST送信する。
+        response = await fetch("/api/generate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({
+            scene_id: sceneId,
+            raw_note: rawNote,
+            manager_quote: managerQuote,
+            self_response: selfResponse,
+          }),
+          signal: controller.signal,
+        });
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
+      // エラーレスポンス時は本文をテキストで読み、JSON なら message を拾う（504 等で HTML になる場合がある）。
       if (!response.ok) {
-        const fail = (await response.json()) as { message?: string };
-        throw new Error(fail.message ?? "生成に失敗しました。");
+        const text = await response.text();
+        let msg = "生成に失敗しました。";
+        try {
+          const fail = JSON.parse(text) as { message?: string };
+          if (typeof fail.message === "string" && fail.message.trim()) {
+            msg = fail.message;
+          }
+        } catch {
+          msg = `${msg}（HTTP ${response.status}）`;
+        }
+        throw new Error(msg);
       }
       // 正常レスポンスを読む。
       const data = (await response.json()) as {
@@ -165,8 +187,16 @@ export default function AppPage() {
       // 結果を画面へ反映する。
       setResult(data.ai_output);
     } catch (e) {
-      // 例外時の表示文を整える。
-      setError(e instanceof Error ? e.message : "不明なエラーが発生しました。");
+      // 例外時の表示文を整える（Abort はタイムアウト扱い）。
+      if (e instanceof DOMException && e.name === "AbortError") {
+        setError(
+          "応答に時間がかかりすぎたため中断しました。Vercel の関数タイムアウトや OpenAI の混雑の可能性があります。しばらくしてから短い文で再試行してください。"
+        );
+      } else {
+        setError(
+          e instanceof Error ? e.message : "不明なエラーが発生しました。"
+        );
+      }
     } finally {
       // 送信中を解除する。
       setLoading(false);
