@@ -190,7 +190,7 @@ export default function AppPage() {
       // 例外時の表示文を整える（Abort はタイムアウト扱い）。
       if (e instanceof DOMException && e.name === "AbortError") {
         setError(
-          "応答に時間がかかりすぎたため中断しました。Vercel の関数タイムアウトや OpenAI の混雑の可能性があります。しばらくしてから短い文で再試行してください。"
+          "応答に時間がかかりすぎたため中断しました。Vercel の関数タイムアウトや OpenAI の混雑の可能性があります。しばらくしてから再度お試しください。"
         );
       } else {
         setError(

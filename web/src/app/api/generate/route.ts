@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
+import OpenAI, { APIError } from "openai";
 import { z } from "zod";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 import { checkAndConsumeFreeQuota } from "@/lib/free-limit";
@@ -20,6 +20,50 @@ function getOpenAiClient() {
   }
   // クライアントを返す。
   return new OpenAI({ apiKey });
+}
+
+// AI出力JSONのトップレベルキー（ここに紐づくZodエラーは「ユーザーの入力が長い」ではなくモデル側の不整合として扱う）。
+const AI_OUTPUT_TOP_KEYS = new Set([
+  "situation_analysis",
+  "morning_action",
+  "copy_paste_text",
+  "empathy_line",
+  "bad_news_first_line",
+  "fallback_reply",
+]);
+
+// ZodのパスがAI出力フィールドかどうかを判定する（Zodの path は PropertyKey[] になるため先頭だけ string か確認する）。
+function isAiOutputZodPath(path: ReadonlyArray<PropertyKey>): boolean {
+  const top = path[0];
+  return typeof top === "string" && AI_OUTPUT_TOP_KEYS.has(top);
+}
+
+// Zodエラーを入力用とAI出力用に分け、クライアントが表示する短文メッセージを返す。
+function zodErrorResponse(error: z.ZodError): NextResponse {
+  const aiSide = error.issues.some((issue) => isAiOutputZodPath(issue.path));
+  if (aiSide) {
+    return NextResponse.json(
+      {
+        error: "AI_OUTPUT_VALIDATION",
+        message:
+          "AIが返した内容が想定の形式（文字数など）を満たさなかったため保存できませんでした。同じ内容のまま「カンペを生成」をもう一度押してください。",
+        details: error.flatten(),
+      },
+      { status: 502 }
+    );
+  }
+  const first = error.issues[0];
+  const hint = first
+    ? `${String(first.path[0] ?? "入力")}: ${first.message}`
+    : "入力内容を確認してください。";
+  return NextResponse.json(
+    {
+      error: "INVALID_INPUT",
+      message: `入力内容を確認してください（${hint}）。`,
+      details: error.flatten(),
+    },
+    { status: 400 }
+  );
 }
 
 // Authorization ヘッダーから Bearer トークンを取り出す。
@@ -126,10 +170,26 @@ export async function POST(req: Request) {
         { status: 502 }
       );
     }
-    // JSONとして解析する。
-    const rawJson = JSON.parse(rawText);
-    // 出力契約を検証する。
-    const output = aiOutputSchema.parse(rawJson);
+    // JSONとして解析する（モデルがJSON以外を返すとここで失敗する）。
+    let rawJson: unknown;
+    try {
+      rawJson = JSON.parse(rawText);
+    } catch {
+      return NextResponse.json(
+        {
+          error: "AI_OUTPUT_NOT_JSON",
+          message:
+            "AIの応答をJSONとして解釈できませんでした。入力が短くても起こり得ます。しばらくしてから同じ内容でもう一度お試しください。",
+        },
+        { status: 502 }
+      );
+    }
+    // 出力契約を検証する（キー欠如・文字数不足などはユーザーのメモの長さとは無関係なことが多い）。
+    const outputParse = aiOutputSchema.safeParse(rawJson);
+    if (!outputParse.success) {
+      return zodErrorResponse(outputParse.error);
+    }
+    const output = outputParse.data;
 
     // セッションを保存する。
     const sessionRef = db.collection("sessions").doc();
@@ -182,19 +242,48 @@ export async function POST(req: Request) {
         { status: 401 }
       );
     }
-    // Zod検証エラーは400で返す。
+    // Zod検証エラー（主にリクエスト入力）はメッセージ付きで返す。
     if (error instanceof z.ZodError) {
+      return zodErrorResponse(error);
+    }
+    // OpenAI SDK が投げるHTTP系エラーをユーザー向けに要約する（キー不正・レート制限など）。
+    if (error instanceof APIError) {
+      const status = error.status ?? 502;
+      if (status === 429) {
+        return NextResponse.json(
+          {
+            error: "OPENAI_RATE_LIMIT",
+            message:
+              "AIサービスが混雑しています。1〜2分待ってから再度お試しください。",
+          },
+          { status: 429 }
+        );
+      }
+      if (status === 401) {
+        return NextResponse.json(
+          {
+            error: "OPENAI_AUTH",
+            message:
+              "OpenAI の認証に失敗しました。OPENAI_API_KEY（Vercel の Production 含む）を確認してください。",
+          },
+          { status: 503 }
+        );
+      }
       return NextResponse.json(
-        { error: "INVALID_INPUT", details: error.flatten() },
-        { status: 400 }
+        {
+          error: "OPENAI_ERROR",
+          message:
+            "AIサービス側でエラーが発生しました。しばらくしてから再度お試しください。",
+        },
+        { status: 502 }
       );
     }
-    // 予期しないエラーは500で返す。
+    // 予期しないエラーは500で返す（入力の長さと結びつけない）。
     return NextResponse.json(
       {
         error: "INTERNAL_ERROR",
         message:
-          "生成処理でエラーが発生しました。入力内容を短くして再実行してください。",
+          "生成処理で予期しないエラーが発生しました。しばらくしてから再度お試しください。繰り返す場合はサーバー側のログ（例: Vercel の Functions ログの [api/generate]）を確認してください。",
       },
       { status: 500 }
     );
