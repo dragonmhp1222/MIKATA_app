@@ -1,6 +1,7 @@
 "use client";
 
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { GENERATE_CLIENT_TIMEOUT_MS } from "@/lib/generate-limits";
 import { getFirebaseAuth } from "@/lib/firebase-client";
@@ -206,7 +207,15 @@ export default function AppPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <main className="mx-auto w-full max-w-4xl px-6 py-10">
-        <h1 className="text-2xl font-bold">MIKATA | 今夜の準備</h1>
+        <h1 className="text-2xl font-bold tracking-tight">
+          <Link
+            href="/"
+            className="text-cyan-400 transition hover:text-cyan-300 hover:underline"
+          >
+            MIKATA
+          </Link>
+          <span className="text-slate-100"> | 今夜の準備</span>
+        </h1>
         <p className="mt-2 text-sm text-slate-300">
           シーン3択→状況入力→カンペ生成の順で進めます。
         </p>
