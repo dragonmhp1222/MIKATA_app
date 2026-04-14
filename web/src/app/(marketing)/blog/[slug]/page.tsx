@@ -2,12 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { compileMDX } from "next-mdx-remote/rsc";
-import matter from "gray-matter";
-import {
-  getAllPostsMeta,
-  getPostRawBySlug,
-  type BlogFrontmatter,
-} from "@/lib/blog";
+import { getAllPostsMeta, getPostParsedBySlug } from "@/lib/blog";
 
 type PageProps = { params: Promise<{ slug: string }> };
 
@@ -21,10 +16,9 @@ export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const raw = getPostRawBySlug(slug);
-  if (!raw) return {};
-  const { data } = matter(raw);
-  const fm = data as BlogFrontmatter;
+  const parsed = getPostParsedBySlug(slug);
+  if (!parsed) return {};
+  const fm = parsed.fm;
   const title = fm.metaTitle ?? fm.title;
   const description = fm.metaDescription ?? fm.excerpt ?? "";
   return {
@@ -43,15 +37,15 @@ export async function generateMetadata({
 // 単一記事ページ。読みやすい段組・余白・タイポグラフィで本文を包む。
 export default async function BlogPostPage({ params }: PageProps) {
   const { slug } = await params;
-  const raw = getPostRawBySlug(slug);
-  if (!raw) notFound();
+  const parsed = getPostParsedBySlug(slug);
+  if (!parsed) notFound();
 
-  const { content, frontmatter } = await compileMDX<BlogFrontmatter>({
-    source: raw,
-    options: { parseFrontmatter: true },
+  const { content } = await compileMDX({
+    source: parsed.body,
+    options: { parseFrontmatter: false },
   });
 
-  const fm = frontmatter;
+  const fm = parsed.fm;
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 pb-20 pt-6 sm:px-6 lg:max-w-4xl">

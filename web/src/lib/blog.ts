@@ -21,33 +21,38 @@ export type BlogFrontmatter = {
   canonical?: string;
 };
 
-// 一覧用に全記事のメタだけを返す（新しい日付が先）。
-export const getAllPostsMeta = cache((): BlogFrontmatter[] => {
-  if (!fs.existsSync(BLOG_DIR)) return [];
-  return fs
-    .readdirSync(BLOG_DIR)
-    .filter((f) => f.endsWith(".mdx") || f.endsWith(".md"))
-    .map((file) => {
-      const raw = fs.readFileSync(path.join(BLOG_DIR, file), "utf8");
-      const { data } = matter(raw);
-      return data as BlogFrontmatter;
-    })
-    .filter((d) => typeof d.slug === "string" && typeof d.title === "string")
-    .sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-    );
-});
+// slug ごとに gray-matter を1回だけかけた結果（同一リクエスト・ビルド内は React cache で共有）。
+type ParsedPost = { fm: BlogFrontmatter; body: string };
 
-// slug に一致する記事のソース全文（frontmatter 付き）を返す。
-export const getPostRawBySlug = cache((slug: string): string | null => {
-  if (!fs.existsSync(BLOG_DIR)) return null;
+// 全記事をディスクから読み、slug キーの Map に載せる（一覧・個別でファイル走査を重ねない）。
+const getPostsBySlug = cache((): Map<string, ParsedPost> => {
+  const map = new Map<string, ParsedPost>();
+  if (!fs.existsSync(BLOG_DIR)) return map;
   const files = fs
     .readdirSync(BLOG_DIR)
     .filter((f) => f.endsWith(".mdx") || f.endsWith(".md"));
   for (const file of files) {
     const raw = fs.readFileSync(path.join(BLOG_DIR, file), "utf8");
-    const { data } = matter(raw);
-    if ((data as BlogFrontmatter).slug === slug) return raw;
+    const { data, content } = matter(raw);
+    const fm = data as BlogFrontmatter;
+    if (typeof fm.slug === "string" && fm.slug) {
+      map.set(fm.slug, { fm, body: content });
+    }
   }
-  return null;
+  return map;
 });
+
+// 一覧用に全記事のメタだけを返す（新しい日付が先）。
+export const getAllPostsMeta = cache((): BlogFrontmatter[] => {
+  return Array.from(getPostsBySlug().values())
+    .map((p) => p.fm)
+    .filter((d) => typeof d.title === "string")
+    .sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+});
+
+// slug に一致する記事の frontmatter と本文（frontmatter 除去済み）を返す。
+export const getPostParsedBySlug = cache(
+  (slug: string): ParsedPost | null => getPostsBySlug().get(slug) ?? null
+);
