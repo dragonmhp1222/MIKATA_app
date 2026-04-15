@@ -2,7 +2,7 @@
 
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { collectAllInputWarnings } from "@/lib/input-sanitize";
 import { GENERATE_CLIENT_TIMEOUT_MS } from "@/lib/generate-limits";
 import { getFirebaseAuth } from "@/lib/firebase-client";
@@ -94,6 +94,59 @@ export default function AppPage() {
   const handleLegalGateChange = useCallback((ok: boolean) => {
     setLegalGateOk(ok);
   }, []);
+
+  // 直前の uid（初回は undefined）。未ログイン→初ログインではフォームを消さず、ログアウト／アカウント切替だけ消す。
+  const prevAuthUidRef = useRef<string | null | undefined>(undefined);
+
+  const resetSessionFormForNewViewer = useCallback(() => {
+    setSceneId("forecast_meeting");
+    setRawNote("");
+    setManagerQuote("");
+    setSelfResponse("");
+    setLoading(false);
+    setError("");
+    setCopyState("idle");
+    setInputWarnings([]);
+    setLegalGateOk(false);
+    setResult(null);
+  }, []);
+
+  useEffect(() => {
+    const uid = user?.uid ?? null;
+    const prev = prevAuthUidRef.current;
+
+    if (prev === undefined) {
+      prevAuthUidRef.current = uid;
+      return;
+    }
+    if (prev === uid) {
+      return;
+    }
+
+    const wasLoggedIn = prev !== null;
+    const isLoggedIn = uid !== null;
+    const isAccountSwitch = wasLoggedIn && isLoggedIn && prev !== uid;
+
+    if ((wasLoggedIn && !isLoggedIn) || isAccountSwitch) {
+      resetSessionFormForNewViewer();
+    }
+
+    prevAuthUidRef.current = uid;
+  }, [user?.uid, resetSessionFormForNewViewer]);
+
+  const resultSectionRef = useRef<HTMLElement | null>(null);
+
+  // 生成完了後、結果ブロックが画面外だと気づかれないためスムーズスクロールする。
+  useEffect(() => {
+    if (!result) return;
+    const id = window.requestAnimationFrame(() => {
+      resultSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [result]);
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
@@ -413,7 +466,10 @@ export default function AppPage() {
           ) : null}
         </section>
         {result ? (
-          <section className="mt-6 rounded-2xl border border-slate-200 bg-white/90 p-5 dark:border-slate-800 dark:bg-slate-900/40">
+          <section
+            ref={resultSectionRef}
+            className="mt-6 scroll-mt-6 rounded-2xl border border-slate-200 bg-white/90 p-5 dark:border-slate-800 dark:bg-slate-900/40"
+          >
             <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
               生成結果
             </h2>

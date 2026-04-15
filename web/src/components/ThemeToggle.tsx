@@ -1,20 +1,36 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 const STORAGE_KEY = "mikata-theme";
 
+// html[data-theme] の変化を購読する（トグルや ThemeProvider の同期で UI を更新するため）。
+function subscribe(onStoreChange: () => void) {
+  const el = document.documentElement;
+  const obs = new MutationObserver(onStoreChange);
+  obs.observe(el, { attributes: true, attributeFilter: ["data-theme"] });
+  return () => obs.disconnect();
+}
+
+// クライアントでは実際の DOM を読む（ハイドレーション後も正しい表示になる）。
+function getSnapshot() {
+  return document.documentElement.getAttribute("data-theme") === "dark";
+}
+
+// SSR 時は layout のデフォルト（data-theme=dark）と揃える。水合わせのズレを減らす。
+function getServerSnapshot() {
+  return true;
+}
+
 // ヘッダー等に置くライト／ダーク切り替え（html[data-theme] をトグル。Tailwind dark: は data-theme=dark に対応）。
 export function ThemeToggle() {
-  const [isDark, setIsDark] = useState(true);
+  const isDark = useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    getServerSnapshot
+  );
 
-  useEffect(() => {
-    setIsDark(
-      document.documentElement.getAttribute("data-theme") === "dark"
-    );
-  }, []);
-
-  const toggle = () => {
+  const toggle = useCallback(() => {
     const nextDark =
       document.documentElement.getAttribute("data-theme") !== "dark";
     document.documentElement.setAttribute(
@@ -22,8 +38,7 @@ export function ThemeToggle() {
       nextDark ? "dark" : "light"
     );
     localStorage.setItem(STORAGE_KEY, nextDark ? "dark" : "light");
-    setIsDark(nextDark);
-  };
+  }, []);
 
   return (
     <button
