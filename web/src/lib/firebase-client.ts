@@ -1,5 +1,6 @@
 import { type FirebaseApp, getApp, getApps, initializeApp } from "firebase/app";
 import { type Auth, getAuth } from "firebase/auth";
+import { type Firestore, getFirestore } from "firebase/firestore";
 
 // ブラウザ用 Firebase 設定を環境変数から読む（NEXT_PUBLIC_* はビルド時に埋め込まれる）。
 function readWebConfig() {
@@ -23,6 +24,8 @@ function readWebConfig() {
 
 // シングルトンの App を保持する（再初期化を防ぐ）。
 let app: FirebaseApp | undefined;
+// Firestore も1つにまとめる（同意記録・無料枠等で使う）。
+let firestore: Firestore | undefined;
 
 // Firebase App を1つだけ初期化して返す。
 export function getFirebaseApp(): FirebaseApp {
@@ -46,4 +49,15 @@ export function getFirebaseApp(): FirebaseApp {
 export function getFirebaseAuth(): Auth {
   // App を取得して Auth を紐づける。
   return getAuth(getFirebaseApp());
+}
+
+// Firestore を返す（利用規約同意の記録などクライアント書き込み用）。
+export function getFirebaseFirestore(): Firestore {
+  if (typeof window === "undefined") {
+    throw new Error("getFirebaseFirestore must run in the browser.");
+  }
+  if (!firestore) {
+    firestore = getFirestore(getFirebaseApp());
+  }
+  return firestore;
 }

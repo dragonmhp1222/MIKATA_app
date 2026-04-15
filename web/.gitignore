@@ -40,3 +40,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 法務: docx 書き出し作業用（本文は content/legal/*.mdx を正とする）
+content/legal/_import/
+content/legal/_extracted/

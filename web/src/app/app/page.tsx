@@ -2,10 +2,13 @@
 
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { collectAllInputWarnings } from "@/lib/input-sanitize";
 import { GENERATE_CLIENT_TIMEOUT_MS } from "@/lib/generate-limits";
 import { getFirebaseAuth } from "@/lib/firebase-client";
+import { LegalConsentSection } from "@/components/LegalConsentSection";
+import { LegalFooter } from "@/components/LegalFooter";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 // 画面で扱うシーン型を固定する。
 type SceneId = "forecast_meeting" | "ride_along_feedback" | "slack_callout";
@@ -71,6 +74,7 @@ export default function AppPage() {
   const [error, setError] = useState("");
   const [copyState, setCopyState] = useState<"idle" | "ok" | "fail">("idle");
   const [inputWarnings, setInputWarnings] = useState<string[]>([]);
+  const [legalGateOk, setLegalGateOk] = useState(false);
   const [result, setResult] = useState<{
     situation_analysis: string;
     morning_action: string;
@@ -86,6 +90,10 @@ export default function AppPage() {
   );
 
   const quickTagsForScene = QUICK_TAGS[sceneId];
+
+  const handleLegalGateChange = useCallback((ok: boolean) => {
+    setLegalGateOk(ok);
+  }, []);
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
@@ -159,6 +167,12 @@ export default function AppPage() {
       setError("先に Google でログインしてください。");
       return;
     }
+    if (!legalGateOk) {
+      setError(
+        "プライバシーポリシーと利用規約を表示して確認し、同意にチェックを入れてください。"
+      );
+      return;
+    }
     setLoading(true);
     setInputWarnings(
       collectAllInputWarnings({
@@ -195,9 +209,15 @@ export default function AppPage() {
         const text = await response.text();
         let msg = "生成に失敗しました。";
         try {
-          const fail = JSON.parse(text) as { message?: string };
+          const fail = JSON.parse(text) as {
+            message?: string;
+            error?: string;
+          };
           if (typeof fail.message === "string" && fail.message.trim()) {
             msg = fail.message;
+          }
+          if (response.status === 403 && fail.error === "LEGAL_CONSENT_REQUIRED") {
+            setLegalGateOk(false);
           }
         } catch {
           msg = `${msg}（HTTP ${response.status}）`;
@@ -235,35 +255,41 @@ export default function AppPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <main className="mx-auto w-full max-w-4xl px-6 py-10">
-        <h1 className="text-2xl font-bold tracking-tight">
-          <Link
-            href="/"
-            className="text-cyan-400 transition hover:text-cyan-300 hover:underline"
-          >
-            MIKATA
-          </Link>
-          <span className="text-slate-100"> | 今夜の準備</span>
-        </h1>
-        <p className="mt-2 text-sm text-slate-300">
+    <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-10">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h1 className="text-2xl font-bold tracking-tight">
+            <Link
+              href="/"
+              className="text-cyan-600 transition hover:text-cyan-700 hover:underline dark:text-cyan-400 dark:hover:text-cyan-300"
+            >
+              MIKATA
+            </Link>
+            <span className="text-slate-900 dark:text-slate-100">
+              {" "}
+              | 今夜の準備
+            </span>
+          </h1>
+          <ThemeToggle />
+        </div>
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
           シーン3択→状況入力→カンペ生成の順で進めます。
         </p>
         {authInitError ? (
-          <p className="mt-4 rounded-xl border border-rose-800 bg-rose-950/40 px-4 py-3 text-sm text-rose-200">
+          <p className="mt-4 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
             {authInitError}
           </p>
         ) : (
           <div className="mt-4 flex flex-wrap items-center gap-3">
             {user ? (
               <>
-                <span className="text-sm text-slate-300">
+                <span className="text-sm text-slate-600 dark:text-slate-300">
                   ログイン中: {user.email ?? user.uid}
                 </span>
                 <button
                   type="button"
                   onClick={handleSignOut}
-                  className="rounded-full border border-slate-600 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800"
+                  className="rounded-full border border-slate-300 px-4 py-2 text-sm text-slate-800 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
                   ログアウト
                 </button>
@@ -272,7 +298,7 @@ export default function AppPage() {
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
-                className="rounded-full bg-white px-5 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-200"
+                className="rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
               >
                 Googleでログイン
               </button>
@@ -287,22 +313,28 @@ export default function AppPage() {
               onClick={() => setSceneId(scene.id)}
               className={`rounded-xl border p-4 text-left ${
                 scene.id === sceneId
-                  ? "border-cyan-400 bg-cyan-400/10"
-                  : "border-slate-700 bg-slate-900/40"
+                  ? "border-cyan-500 bg-cyan-50 dark:border-cyan-400 dark:bg-cyan-400/10"
+                  : "border-slate-200 bg-white/80 dark:border-slate-700 dark:bg-slate-900/40"
               }`}
             >
-              <p className="font-medium">{scene.title}</p>
-              <p className="mt-1 text-xs text-slate-300">{scene.description}</p>
+              <p className="font-medium text-slate-900 dark:text-slate-100">
+                {scene.title}
+              </p>
+              <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                {scene.description}
+              </p>
             </button>
           ))}
         </div>
-        <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/40 p-5">
-          <p className="text-sm text-slate-300">
+        <section className="mt-6 rounded-2xl border border-slate-200 bg-white/90 p-5 dark:border-slate-800 dark:bg-slate-900/40">
+          <p className="text-sm text-slate-700 dark:text-slate-300">
             選択中: {selectedScene?.title ?? "シーン未選択"}
           </p>
-          <p className="mt-3 text-xs text-slate-400">
+          <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
             入力内容はAI生成のためOpenAI, LLC（米国）に送信されます。顧客名・企業名・金額などは
-            <span className="text-slate-200">必ず伏せ字</span>
+            <span className="font-medium text-slate-800 dark:text-slate-200">
+              必ず伏せ字
+            </span>
             で入力してください（例：A社、顧客X、〇万円）。
           </p>
           <p className="mt-4 text-sm font-medium">クイックタグ（タップで状況メモに追記）</p>
@@ -312,7 +344,7 @@ export default function AppPage() {
                 key={tag}
                 type="button"
                 onClick={() => appendToRawNote(tag)}
-                className="rounded-full border border-slate-600 bg-slate-950/60 px-3 py-1 text-xs text-slate-200 hover:border-cyan-500/60 hover:text-cyan-100"
+                className="rounded-full border border-slate-300 bg-slate-100 px-3 py-1 text-xs text-slate-800 hover:border-cyan-500 hover:text-cyan-800 dark:border-slate-600 dark:bg-slate-950/60 dark:text-slate-200 dark:hover:border-cyan-500/60 dark:hover:text-cyan-100"
               >
                 {tag}
               </button>
@@ -324,83 +356,107 @@ export default function AppPage() {
             onChange={(event) => setRawNote(event.target.value)}
             rows={6}
             placeholder={RAW_NOTE_PLACEHOLDER}
-            className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2"
+            className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
           />
           <label className="mt-4 block text-sm font-medium">上司のセリフ（任意）</label>
           <input
             value={managerQuote}
             onChange={(event) => setManagerQuote(event.target.value)}
             placeholder='例: 「で、根拠は？」「いつまでに挽回するの？」'
-            className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2"
+            className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
           />
           <label className="mt-4 block text-sm font-medium">自分の返答（任意）</label>
           <input
             value={selfResponse}
             onChange={(event) => setSelfResponse(event.target.value)}
             placeholder='例: 「すみません、説明が足りませんでした。明日までに…」'
-            className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2"
+            className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
           />
-          <p className="mt-4 text-xs text-slate-400">
+          <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
             顧客名・個人名・未公開数値は、顧客X / 上司A / ○万円 など伏せ字で入力してください。
           </p>
           {inputWarnings.length > 0 ? (
             <div
-              className="mt-3 rounded-xl border border-amber-800/80 bg-amber-950/30 px-3 py-2 text-xs text-amber-100/95"
+              className="mt-3 rounded-xl border border-amber-300/90 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-800/80 dark:bg-amber-950/30 dark:text-amber-100/95"
               role="status"
             >
-              <p className="font-medium text-amber-100">入力内容の確認（そのまま生成できます）</p>
-              <ul className="mt-1 list-inside list-disc space-y-0.5 text-amber-100/85">
+              <p className="font-medium text-amber-900 dark:text-amber-100">
+                入力内容の確認（そのまま生成できます）
+              </p>
+              <ul className="mt-1 list-inside list-disc space-y-0.5 text-amber-900/90 dark:text-amber-100/85">
                 {inputWarnings.map((w, i) => (
                   <li key={`${i}-${w}`}>{w}</li>
                 ))}
               </ul>
             </div>
           ) : null}
+          <LegalConsentSection
+            user={user}
+            authBlocked={!!authInitError}
+            onGateChange={handleLegalGateChange}
+          />
           <button
             type="button"
             onClick={handleGenerate}
-            disabled={loading || !user || !!authInitError}
+            disabled={
+              loading ||
+              !user ||
+              !!authInitError ||
+              (Boolean(user) && !legalGateOk)
+            }
             className="mt-4 rounded-full bg-cyan-400 px-5 py-2 font-semibold text-slate-950 disabled:opacity-60"
           >
             {loading ? "生成中…" : "カンペを生成する（無料）"}
           </button>
-          {error ? <p className="mt-3 text-sm text-rose-300">{error}</p> : null}
+          {error ? (
+            <p className="mt-3 text-sm text-rose-700 dark:text-rose-300">{error}</p>
+          ) : null}
         </section>
         {result ? (
-          <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/40 p-5">
-            <h2 className="text-lg font-semibold">生成結果</h2>
-            <p className="mt-2 text-xs text-slate-500">
+          <section className="mt-6 rounded-2xl border border-slate-200 bg-white/90 p-5 dark:border-slate-800 dark:bg-slate-900/40">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              生成結果
+            </h2>
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-500">
               ※実在の顧客名・会社名・未公開の数値を、そのまま他人に見せたくない場合は、コピペ前に自分で伏せ字に置き換えてください。
             </p>
-            <div className="mt-4 border-b border-slate-800 pb-4">
-              <p className="text-base font-medium text-slate-100">
+            <div className="mt-4 border-b border-slate-200 pb-4 dark:border-slate-800">
+              <p className="text-base font-medium text-slate-900 dark:text-slate-100">
                 正直、こういう状況しんどいですよね。
               </p>
-              <p className="mt-2 text-xs text-slate-400">
+              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                 MIKATAは業務上の準備を助けるツールです。
               </p>
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
                 ※本サービスは医療・心理支援サービスではありません。
               </p>
             </div>
             <div className="mt-4 grid gap-4">
               <div>
-                <p className="text-xs text-slate-400">今の状況（何が起きてるか）</p>
-                <p className="mt-1">{result.situation_analysis}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  今の状況（何が起きてるか）
+                </p>
+                <p className="mt-1 text-slate-800 dark:text-slate-100">
+                  {result.situation_analysis}
+                </p>
               </div>
               <div>
-                <p className="text-xs text-slate-400">明日やること（これで詰まない）</p>
-                <p className="mt-1 font-semibold text-cyan-300">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  明日やること（これで詰まない）
+                </p>
+                <p className="mt-1 font-semibold text-cyan-700 dark:text-cyan-300">
                   {result.morning_action}
                 </p>
               </div>
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs text-slate-400">このまま送れる報告文</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    このまま送れる報告文
+                  </p>
                   <button
                     type="button"
                     onClick={handleCopyReport}
-                    className="rounded-full border border-slate-600 px-3 py-1 text-xs text-slate-200 hover:bg-slate-800"
+                    className="rounded-full border border-slate-300 px-3 py-1 text-xs text-slate-800 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
                   >
                     {copyState === "ok" ? "コピーしました" : "コピー"}
                   </button>
@@ -409,30 +465,39 @@ export default function AppPage() {
                   readOnly
                   value={result.copy_paste_text}
                   rows={5}
-                  className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2"
+                  className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 />
                 {copyState === "fail" ? (
-                  <p className="mt-2 text-xs text-amber-200/90">
+                  <p className="mt-2 text-xs text-amber-800 dark:text-amber-200/90">
                     ブラウザがコピーを拒否しました。テキストを選択してコピーしてください。
                   </p>
                 ) : null}
               </div>
               {result.bad_news_first_line ? (
                 <div>
-                  <p className="text-xs text-slate-400">最初にこれだけ言えばOK</p>
-                  <p className="mt-1">{result.bad_news_first_line}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    最初にこれだけ言えばOK
+                  </p>
+                  <p className="mt-1 text-slate-800 dark:text-slate-100">
+                    {result.bad_news_first_line}
+                  </p>
                 </div>
               ) : null}
               {result.fallback_reply ? (
                 <div>
-                  <p className="text-xs text-slate-400">詰められた時の返し</p>
-                  <p className="mt-1">{result.fallback_reply}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    詰められた時の返し
+                  </p>
+                  <p className="mt-1 text-slate-800 dark:text-slate-100">
+                    {result.fallback_reply}
+                  </p>
                 </div>
               ) : null}
             </div>
           </section>
         ) : null}
       </main>
+      <LegalFooter />
     </div>
   );
 }

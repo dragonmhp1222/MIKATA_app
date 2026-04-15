@@ -5,3 +5,6 @@
 
 # 作業用アーカイブ（誤コミット防止）
 files.zip
+
+# Apple Pages の書き出し（本文は web/content/legal/*.mdx を正とする）
+*.pages

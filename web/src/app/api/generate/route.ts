@@ -117,6 +117,21 @@ export async function POST(req: Request) {
     const decoded = await adminAuth.verifyIdToken(idToken);
     const uid = decoded.uid;
 
+    // 利用規約・プライバシー同意（クライアントでチェック済みでもサーバーで必ず検証する）。
+    const db = getAdminDb();
+    const consentSnap = await db.collection("users").doc(uid).get();
+    const consentAt = consentSnap.data()?.legal_consent_at;
+    if (consentAt == null) {
+      return NextResponse.json(
+        {
+          error: "LEGAL_CONSENT_REQUIRED",
+          message:
+            "利用規約・プライバシーポリシーへの同意が必要です。各文書を開いて確認し、同意にチェックを入れてから再度お試しください。",
+        },
+        { status: 403 }
+      );
+    }
+
     // リクエストJSONを読む。
     const body = await req.json();
     // 入力をスキーマ検証して型安全にする。
@@ -153,9 +168,7 @@ export async function POST(req: Request) {
     }
     const sanitizedInput = sanitizedParse.data;
 
-    // Firestoreを取得して無料枠をチェックする。
-    const db = getAdminDb();
-    // 1日1回制限を判定して、利用時は消費を記録する。
+    // 無料枠をチェックする（1日1回制限。利用時は消費を記録）。
     const quota = await checkAndConsumeFreeQuota(db, uid);
     // 利用不可なら429で返す。
     if (!quota.allowed) {

@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
+import { ThemeProvider } from "@/components/ThemeProvider";
+import { THEME_INIT_SCRIPT } from "@/lib/theme-init-script";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,12 +32,19 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      // 言語を日本語にして検索エンジンとブラウザに適切な情報を渡す。
       lang="ja"
-      // フォント変数と全高レイアウトを適用する。
+      suppressHydrationWarning
+      data-theme="dark"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="flex min-h-full flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+        <Script
+          id="theme-init"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }}
+        />
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
     </html>
   );
 }
