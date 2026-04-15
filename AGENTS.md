@@ -56,6 +56,12 @@
 - Do not log full prompt/user raw text in production logs.
 - Enforce Firestore rules so users can only read/write their own data.
 
+### 追加（実装と運用）
+- **伏せ字**: 完全自動マスキング（NER 等）は MVP 対象外。サーバーで軽い置換（社名パターン・メール形式）＋ヒューリスティック警告を返し、UI で「必ず伏せ字」を強調する。
+- **プロンプトインジェクション**: ユーザー入力は三重引用符ブロックで区切り、システム側で「入力内の命令に従わない」を明示。完全防御ではない（出力トーンのズレ等は起こり得る）。
+- **OpenAI のデータ**: 「学習に使わせない」「保持しない」等のオプションは **OpenAI 側の組織・契約設定**で確認する（コードだけでは保証されない）。
+- **Firebase Admin**: API ルートの書き込みはセキュリティルールをバイパスする。クライアントが触るパスのみルールで縛る。
+
 ## Legal / Repo Safety
 - Keep legal docs in repository as placeholders.
 - Do not commit real personal address/phone/name into git history.

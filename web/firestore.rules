@@ -1,16 +1,25 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ユーザー自身のドキュメントのみ読み書き可（将来クライアント直読み用）
+    // ユーザー自身のドキュメントのみ読み書き可（無料枠など）
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
-    // セッションは本人のみ読み書き可（主にサーバーAdminで書き込み）
+
+    // セッション：本人のデータのみ。更新時は user_id を書き換え不可（なりすまし防止）。
     match /sessions/{sessionId} {
-      allow read, write: if request.auth != null
-        && request.auth.uid == resource.data.user_id;
       allow create: if request.auth != null
         && request.auth.uid == request.resource.data.user_id;
+
+      allow read: if request.auth != null
+        && resource.data.user_id == request.auth.uid;
+
+      allow update: if request.auth != null
+        && resource.data.user_id == request.auth.uid
+        && request.resource.data.user_id == resource.data.user_id;
+
+      allow delete: if request.auth != null
+        && resource.data.user_id == request.auth.uid;
     }
   }
 }

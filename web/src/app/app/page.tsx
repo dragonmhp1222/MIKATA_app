@@ -3,53 +3,74 @@
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { collectAllInputWarnings } from "@/lib/input-sanitize";
 import { GENERATE_CLIENT_TIMEOUT_MS } from "@/lib/generate-limits";
 import { getFirebaseAuth } from "@/lib/firebase-client";
 
 // 画面で扱うシーン型を固定する。
 type SceneId = "forecast_meeting" | "ride_along_feedback" | "slack_callout";
 
-// シーン選択肢を1か所で管理する。
+// シーン選択肢を1か所で管理する（LPの①②③説明と揃える）。
 const SCENES: Array<{ id: SceneId; title: string; description: string }> = [
-  // ①ヨミ会向けの選択肢を定義する。
   {
     id: "forecast_meeting",
     title: "① ヨミ会・進捗報告の前夜",
-    description: "明日の返しと根拠を整理する",
+    description: "「で、根拠は？」に詰まらないための返しと根拠を用意する",
   },
-  // ②同行フィードバック向けの選択肢を定義する。
   {
     id: "ride_along_feedback",
     title: "② 同行・商談後のフィードバック",
-    description: "自分なりの解釈を整理する",
+    description: "「何がダメだった？」に答えられるよう、自分なりの解釈を整理する",
   },
-  // ③Slack呼び出し向けの選択肢を定義する。
   {
     id: "slack_callout",
     title: "③ 「ちょっといい？」Slack呼び出し",
-    description: "最初の一言と答え方を決める",
+    description: "最初の一言で詰まらないための準備をする",
   },
 ];
 
+// クイックタグ（クリックで状況メモに追記するだけ。APIは変更不要）。
+const QUICK_TAGS: Record<SceneId, string[]> = {
+  forecast_meeting: [
+    "決裁者が不在で案件が止まっている",
+    "いつ受注になるか言い切れない案件がある",
+    "上司には「頑張ります」しか返せていない",
+    "優先度が変わったが説明が弱かった",
+    "パイプラインはあるが確度の言語化ができていない",
+  ],
+  ride_along_feedback: [
+    "商談で詰まったポイントがある",
+    "失注理由が言い訳に聞こえた",
+    "次の打ち手が抽象的だった",
+    "顧客の反応を取りこぼした気がする",
+    "同行者の指摘がそのまま言えない",
+  ],
+  slack_callout: [
+    "急な呼び出しで内容が読めない",
+    "前回の宿題が未完了",
+    "数字の説明を求められそう",
+    "他部署案件のすれ違いがある",
+    "通知が来ただけで身構えてしまう",
+  ],
+};
+
+const RAW_NOTE_PLACEHOLDER = `例:
+- 決裁者が不在で案件が止まっている
+- いつ受注になるか言い切れない案件が2件ある
+- 上司には「頑張ります」しか返せていない`;
+
 // アプリ本体ページを描画する。
 export default function AppPage() {
-  // ログインユーザーを保持する。
   const [user, setUser] = useState<User | null>(null);
-  // Firebase 初期化エラーを保持する。
   const [authInitError, setAuthInitError] = useState<string | null>(null);
-  // 選択中シーンを保持する。
   const [sceneId, setSceneId] = useState<SceneId>("forecast_meeting");
-  // 生入力メモを保持する。
   const [rawNote, setRawNote] = useState("");
-  // 上司のセリフを保持する。
   const [managerQuote, setManagerQuote] = useState("");
-  // 自分の返答を保持する。
   const [selfResponse, setSelfResponse] = useState("");
-  // 送信中フラグを保持する。
   const [loading, setLoading] = useState(false);
-  // エラーメッセージを保持する。
   const [error, setError] = useState("");
-  // AI結果を保持する。
+  const [copyState, setCopyState] = useState<"idle" | "ok" | "fail">("idle");
+  const [inputWarnings, setInputWarnings] = useState<string[]>([]);
   const [result, setResult] = useState<{
     situation_analysis: string;
     morning_action: string;
@@ -59,23 +80,19 @@ export default function AppPage() {
     fallback_reply?: string;
   } | null>(null);
 
-  // 選択シーン情報を引き当てる。
   const selectedScene = useMemo(
     () => SCENES.find((scene) => scene.id === sceneId),
     [sceneId]
   );
 
-  // Firebase Auth の状態を購読する。
+  const quickTagsForScene = QUICK_TAGS[sceneId];
+
   useEffect(() => {
-    // 購読解除関数を保持する。
     let unsubscribe: (() => void) | undefined;
     try {
-      // Auth インスタンスを取得する。
       const auth = getFirebaseAuth();
-      // ログイン状態の変化を監視する。
       unsubscribe = onAuthStateChanged(auth, (nextUser) => setUser(nextUser));
     } catch (e) {
-      // 実際のエラー内容を出す。ホストに応じてローカル向け・本番向けの追記を分ける。
       const detail = e instanceof Error ? e.message : String(e);
       const host = window.location.hostname;
       const isLocalDev =
@@ -87,18 +104,22 @@ export default function AppPage() {
         : "本番では Vercel の Environment Variables（Production）に NEXT_PUBLIC_FIREBASE_* 4つを入れ、Redeploy してください。.env.local はデプロイに含まれません。";
       setAuthInitError(`${detail} — ${tail}`);
     }
-    // アンマウント時に購読を解除する。
     return () => unsubscribe?.();
   }, []);
 
-  // Google でサインインする。
+  const appendToRawNote = (line: string) => {
+    setRawNote((prev) => {
+      const t = prev.trim();
+      if (!t) return line;
+      return `${t}\n${line}`;
+    });
+  };
+
   const handleGoogleSignIn = async () => {
     setError("");
     try {
-      // Auth とプロバイダを用意する。
       const auth = getFirebaseAuth();
       const provider = new GoogleAuthProvider();
-      // ポップアップで Google ログインする。
       await signInWithPopup(auth, provider);
     } catch (e) {
       setError(
@@ -107,7 +128,6 @@ export default function AppPage() {
     }
   };
 
-  // サインアウトする。
   const handleSignOut = async () => {
     try {
       const auth = getFirebaseAuth();
@@ -117,32 +137,43 @@ export default function AppPage() {
     }
   };
 
-  // 生成APIを呼び出す。
+  const handleCopyReport = async () => {
+    if (!result?.copy_paste_text) return;
+    try {
+      await navigator.clipboard.writeText(result.copy_paste_text);
+      setCopyState("ok");
+      window.setTimeout(() => setCopyState("idle"), 2000);
+    } catch {
+      setCopyState("fail");
+      window.setTimeout(() => setCopyState("idle"), 4000);
+    }
+  };
+
   const handleGenerate = async () => {
-    // 空入力を防ぐ。
     if (!rawNote.trim()) {
       setError("状況メモを入力してください。");
       return;
     }
-    // エラーを初期化する。
     setError("");
-    // 未ログインなら案内する。
     if (!user) {
       setError("先に Google でログインしてください。");
       return;
     }
-    // 送信中へ切り替える。
     setLoading(true);
+    setInputWarnings(
+      collectAllInputWarnings({
+        raw_note: rawNote,
+        manager_quote: managerQuote,
+        self_response: selfResponse,
+      })
+    );
     try {
-      // 最新の ID トークンを取得する。
       const idToken = await user.getIdToken();
-      // サーバーレス＋AI の待ちが長いとき用に打ち切り（秒表示で案内する）。
       const controller = new AbortController();
       const timeoutMs = GENERATE_CLIENT_TIMEOUT_MS;
       const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
       let response: Response;
       try {
-        // APIへPOST送信する。
         response = await fetch("/api/generate", {
           method: "POST",
           headers: {
@@ -160,7 +191,6 @@ export default function AppPage() {
       } finally {
         window.clearTimeout(timeoutId);
       }
-      // エラーレスポンス時は本文をテキストで読み、JSON なら message を拾う（504 等で HTML になる場合がある）。
       if (!response.ok) {
         const text = await response.text();
         let msg = "生成に失敗しました。";
@@ -174,7 +204,6 @@ export default function AppPage() {
         }
         throw new Error(msg);
       }
-      // 正常レスポンスを読む。
       const data = (await response.json()) as {
         ai_output: {
           situation_analysis: string;
@@ -184,11 +213,13 @@ export default function AppPage() {
           bad_news_first_line?: string;
           fallback_reply?: string;
         };
+        input_warnings?: string[];
       };
-      // 結果を画面へ反映する。
       setResult(data.ai_output);
+      if (Array.isArray(data.input_warnings) && data.input_warnings.length > 0) {
+        setInputWarnings(data.input_warnings);
+      }
     } catch (e) {
-      // 例外時の表示文を整える（Abort はタイムアウト扱い）。
       if (e instanceof DOMException && e.name === "AbortError") {
         setError(
           "応答に時間がかかりすぎたため中断しました。Vercel の関数タイムアウトや OpenAI の混雑の可能性があります。しばらくしてから再度お試しください。"
@@ -199,7 +230,6 @@ export default function AppPage() {
         );
       }
     } finally {
-      // 送信中を解除する。
       setLoading(false);
     }
   };
@@ -270,80 +300,132 @@ export default function AppPage() {
           <p className="text-sm text-slate-300">
             選択中: {selectedScene?.title ?? "シーン未選択"}
           </p>
+          <p className="mt-3 text-xs text-slate-400">
+            入力内容はAI生成のためOpenAI, LLC（米国）に送信されます。顧客名・企業名・金額などは
+            <span className="text-slate-200">必ず伏せ字</span>
+            で入力してください（例：A社、顧客X、〇万円）。
+          </p>
+          <p className="mt-4 text-sm font-medium">クイックタグ（タップで状況メモに追記）</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {quickTagsForScene.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => appendToRawNote(tag)}
+                className="rounded-full border border-slate-600 bg-slate-950/60 px-3 py-1 text-xs text-slate-200 hover:border-cyan-500/60 hover:text-cyan-100"
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
           <label className="mt-4 block text-sm font-medium">状況メモ（必須）</label>
           <textarea
             value={rawNote}
             onChange={(event) => setRawNote(event.target.value)}
-            rows={5}
-            placeholder="例: 進捗遅いと詰められた。理由は優先度変更だが説明が弱かった。"
+            rows={6}
+            placeholder={RAW_NOTE_PLACEHOLDER}
             className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2"
           />
           <label className="mt-4 block text-sm font-medium">上司のセリフ（任意）</label>
           <input
             value={managerQuote}
             onChange={(event) => setManagerQuote(event.target.value)}
-            placeholder="例: 根拠は？いつまでに挽回するの？"
+            placeholder='例: 「で、根拠は？」「いつまでに挽回するの？」'
             className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2"
           />
           <label className="mt-4 block text-sm font-medium">自分の返答（任意）</label>
           <input
             value={selfResponse}
             onChange={(event) => setSelfResponse(event.target.value)}
-            placeholder="例: すみません、頑張ります..."
+            placeholder='例: 「すみません、説明が足りませんでした。明日までに…」'
             className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2"
           />
           <p className="mt-4 text-xs text-slate-400">
             顧客名・個人名・未公開数値は、顧客X / 上司A / ○万円 など伏せ字で入力してください。
           </p>
+          {inputWarnings.length > 0 ? (
+            <div
+              className="mt-3 rounded-xl border border-amber-800/80 bg-amber-950/30 px-3 py-2 text-xs text-amber-100/95"
+              role="status"
+            >
+              <p className="font-medium text-amber-100">入力内容の確認（そのまま生成できます）</p>
+              <ul className="mt-1 list-inside list-disc space-y-0.5 text-amber-100/85">
+                {inputWarnings.map((w, i) => (
+                  <li key={`${i}-${w}`}>{w}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <button
             type="button"
             onClick={handleGenerate}
             disabled={loading || !user || !!authInitError}
             className="mt-4 rounded-full bg-cyan-400 px-5 py-2 font-semibold text-slate-950 disabled:opacity-60"
           >
-            {loading ? "生成中..." : "カンペを生成する（無料）"}
+            {loading ? "生成中…" : "カンペを生成する（無料）"}
           </button>
           {error ? <p className="mt-3 text-sm text-rose-300">{error}</p> : null}
         </section>
         {result ? (
           <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/40 p-5">
             <h2 className="text-lg font-semibold">生成結果</h2>
-            {result.empathy_line ? (
-              <p className="mt-3 rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-200">
-                {result.empathy_line}
+            <p className="mt-2 text-xs text-slate-500">
+              ※実在の顧客名・会社名・未公開の数値を、そのまま他人に見せたくない場合は、コピペ前に自分で伏せ字に置き換えてください。
+            </p>
+            <div className="mt-4 border-b border-slate-800 pb-4">
+              <p className="text-base font-medium text-slate-100">
+                正直、こういう状況しんどいですよね。
               </p>
-            ) : null}
+              <p className="mt-2 text-xs text-slate-400">
+                MIKATAは業務上の準備を助けるツールです。
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                ※本サービスは医療・心理支援サービスではありません。
+              </p>
+            </div>
             <div className="mt-4 grid gap-4">
               <div>
-                <p className="text-xs text-slate-400">状況分析</p>
+                <p className="text-xs text-slate-400">今の状況（何が起きてるか）</p>
                 <p className="mt-1">{result.situation_analysis}</p>
               </div>
               <div>
-                <p className="text-xs text-slate-400">明日の1アクション</p>
+                <p className="text-xs text-slate-400">明日やること（これで詰まない）</p>
                 <p className="mt-1 font-semibold text-cyan-300">
                   {result.morning_action}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-slate-400">コピペ文</p>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-slate-400">このまま送れる報告文</p>
+                  <button
+                    type="button"
+                    onClick={handleCopyReport}
+                    className="rounded-full border border-slate-600 px-3 py-1 text-xs text-slate-200 hover:bg-slate-800"
+                  >
+                    {copyState === "ok" ? "コピーしました" : "コピー"}
+                  </button>
+                </div>
                 <textarea
                   readOnly
                   value={result.copy_paste_text}
                   rows={5}
                   className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2"
                 />
+                {copyState === "fail" ? (
+                  <p className="mt-2 text-xs text-amber-200/90">
+                    ブラウザがコピーを拒否しました。テキストを選択してコピーしてください。
+                  </p>
+                ) : null}
               </div>
               {result.bad_news_first_line ? (
                 <div>
-                  <p className="text-xs text-slate-400">
-                    バッドニュースファースト
-                  </p>
+                  <p className="text-xs text-slate-400">最初にこれだけ言えばOK</p>
                   <p className="mt-1">{result.bad_news_first_line}</p>
                 </div>
               ) : null}
               {result.fallback_reply ? (
                 <div>
-                  <p className="text-xs text-slate-400">予備返答</p>
+                  <p className="text-xs text-slate-400">詰められた時の返し</p>
                   <p className="mt-1">{result.fallback_reply}</p>
                 </div>
               ) : null}
@@ -354,4 +436,3 @@ export default function AppPage() {
     </div>
   );
 }
-

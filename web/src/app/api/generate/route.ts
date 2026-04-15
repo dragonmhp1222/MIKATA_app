@@ -3,12 +3,21 @@ import OpenAI, { APIError } from "openai";
 import { z } from "zod";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 import { checkAndConsumeFreeQuota } from "@/lib/free-limit";
+import {
+  collectAllInputWarnings,
+  lightSanitizeTextField,
+} from "@/lib/input-sanitize";
 import { buildSystemPrompt, buildUserPrompt } from "@/lib/prompt";
 import { aiOutputSchema, generateInputSchema } from "@/lib/schema";
 
 // 秒数はリテラル必須（Next の静的解析）。`@/lib/generate-limits` の GENERATE_SERVER_MAX_DURATION_SEC と同じにすること。
 // クライアントの fetch タイムアウトより長くする（短いと 504 HTML が先に返る）。
 export const maxDuration = 120;
+
+// 応答のばらつきを抑えつつ、コピペ文の具体性を優先する温度。
+const GENERATION_TEMPERATURE = 0.3;
+// JSON/Zod 失敗時は同じ入力でもう1回だけ再試行する。
+const MAX_GENERATION_ATTEMPTS = 2;
 
 // OpenAIクライアントを必要時に生成してビルド時評価を避ける。
 function getOpenAiClient() {
@@ -113,6 +122,37 @@ export async function POST(req: Request) {
     // 入力をスキーマ検証して型安全にする。
     const input = generateInputSchema.parse(body);
 
+    // クライアントに見せる注意（送信前の原文に対するヒューリスティック）。
+    const inputWarnings = [
+      ...new Set(
+        collectAllInputWarnings({
+          raw_note: input.raw_note,
+          manager_quote: input.manager_quote,
+          self_response: input.self_response,
+        })
+      ),
+    ];
+
+    // 保存・モデル送信前の最低限の伏せ字置換（完璧ではない）。
+    const sanitizedParse = generateInputSchema.safeParse({
+      scene_id: input.scene_id,
+      raw_note: lightSanitizeTextField(input.raw_note),
+      manager_quote: lightSanitizeTextField(input.manager_quote),
+      self_response: lightSanitizeTextField(input.self_response),
+    });
+    if (!sanitizedParse.success) {
+      return NextResponse.json(
+        {
+          error: "INVALID_INPUT",
+          message:
+            "入力の整形後に必須欄が空になりました。状況メモに、伏せ字で短い説明を入れてください。",
+          details: sanitizedParse.error.flatten(),
+        },
+        { status: 400 }
+      );
+    }
+    const sanitizedInput = sanitizedParse.data;
+
     // Firestoreを取得して無料枠をチェックする。
     const db = getAdminDb();
     // 1日1回制限を判定して、利用時は消費を記録する。
@@ -132,64 +172,83 @@ export async function POST(req: Request) {
 
     // システムプロンプトを作る。
     const systemPrompt = buildSystemPrompt();
-    // ユーザープロンプトを作る。
-    const userPrompt = buildUserPrompt(input);
+    // ユーザープロンプトを作る（サニタイズ済み入力）。
+    const userPrompt = buildUserPrompt(sanitizedInput);
     // OpenAIクライアントを取得する。
     const client = getOpenAiClient();
 
-    // OpenAIを呼び出してJSON形式で受け取る。
-    const response = await client.responses.create({
-      // モデルは環境変数で切り替え可能にする。
-      model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-      // テキスト出力形式をJSONへ固定する。
-      text: { format: { type: "json_object" } },
-      // 会話入力を渡す。
-      input: [
-        {
-          // システムメッセージを渡す。
-          role: "system",
-          content: [{ type: "input_text", text: systemPrompt }],
-        },
-        {
-          // ユーザーメッセージを渡す。
-          role: "user",
-          content: [{ type: "input_text", text: userPrompt }],
-        },
-      ],
-    });
+    // OpenAI を最大2回まで呼び、空・JSON 崩れ・Zod 不一致のときだけ再試行する。
+    let output: z.infer<typeof aiOutputSchema> | null = null;
+    let lastFailureResponse: NextResponse | null = null;
 
-    // 文字列出力を取得する。
-    const rawText = response.output_text;
-    if (!rawText?.trim()) {
-      return NextResponse.json(
-        {
-          error: "EMPTY_AI_OUTPUT",
-          message:
-            "AIからの応答が空でした。しばらく待ってから再度お試しください。",
-        },
-        { status: 502 }
+    for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS; attempt++) {
+      const response = await client.responses.create({
+        model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+        temperature: GENERATION_TEMPERATURE,
+        text: { format: { type: "json_object" } },
+        input: [
+          {
+            role: "system",
+            content: [{ type: "input_text", text: systemPrompt }],
+          },
+          {
+            role: "user",
+            content: [{ type: "input_text", text: userPrompt }],
+          },
+        ],
+      });
+
+      const rawText = response.output_text;
+      if (!rawText?.trim()) {
+        lastFailureResponse = NextResponse.json(
+          {
+            error: "EMPTY_AI_OUTPUT",
+            message:
+              "AIからの応答が空でした。しばらく待ってから再度お試しください。",
+          },
+          { status: 502 }
+        );
+        continue;
+      }
+
+      let rawJson: unknown;
+      try {
+        rawJson = JSON.parse(rawText);
+      } catch {
+        lastFailureResponse = NextResponse.json(
+          {
+            error: "AI_OUTPUT_NOT_JSON",
+            message:
+              "AIの応答をJSONとして解釈できませんでした。入力が短くても起こり得ます。しばらくしてから同じ内容でもう一度お試しください。",
+          },
+          { status: 502 }
+        );
+        continue;
+      }
+
+      const outputParse = aiOutputSchema.safeParse(rawJson);
+      if (!outputParse.success) {
+        lastFailureResponse = zodErrorResponse(outputParse.error);
+        continue;
+      }
+
+      output = outputParse.data;
+      break;
+    }
+
+    if (!output) {
+      return (
+        lastFailureResponse ??
+        NextResponse.json(
+          {
+            error: "AI_GENERATION_FAILED",
+            message:
+              "AIの応答を確定できませんでした。しばらくしてから再度お試しください。",
+          },
+          { status: 502 }
+        )
       );
     }
-    // JSONとして解析する（モデルがJSON以外を返すとここで失敗する）。
-    let rawJson: unknown;
-    try {
-      rawJson = JSON.parse(rawText);
-    } catch {
-      return NextResponse.json(
-        {
-          error: "AI_OUTPUT_NOT_JSON",
-          message:
-            "AIの応答をJSONとして解釈できませんでした。入力が短くても起こり得ます。しばらくしてから同じ内容でもう一度お試しください。",
-        },
-        { status: 502 }
-      );
-    }
-    // 出力契約を検証する（キー欠如・文字数不足などはユーザーのメモの長さとは無関係なことが多い）。
-    const outputParse = aiOutputSchema.safeParse(rawJson);
-    if (!outputParse.success) {
-      return zodErrorResponse(outputParse.error);
-    }
-    const output = outputParse.data;
 
     // セッションを保存する。
     const sessionRef = db.collection("sessions").doc();
@@ -200,12 +259,12 @@ export async function POST(req: Request) {
       // ユーザーIDを保存する。
       user_id: uid,
       // シーンIDを保存する。
-      scene_id: input.scene_id,
-      // 入力データを保存する。
+      scene_id: sanitizedInput.scene_id,
+      // 入力データを保存する（保存はサニタイズ後）。
       input_payload: {
-        raw_note: input.raw_note,
-        manager_quote: input.manager_quote,
-        self_response: input.self_response,
+        raw_note: sanitizedInput.raw_note,
+        manager_quote: sanitizedInput.manager_quote,
+        self_response: sanitizedInput.self_response,
       },
       // AI出力を保存する。
       ai_output: output,
@@ -221,6 +280,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       session_id: sessionRef.id,
       ai_output: output,
+      input_warnings: inputWarnings,
     });
   } catch (error) {
     // ユーザー文面はログに出さず、原因調査用にメッセージのみ（Vercel の Functions ログで確認可能）。
