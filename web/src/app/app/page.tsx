@@ -76,8 +76,16 @@ export default function AppPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copyState, setCopyState] = useState<"idle" | "ok" | "fail">("idle");
+  const [entryUrlCopied, setEntryUrlCopied] = useState<"idle" | "ok" | "fail">("idle");
   const [inputWarnings, setInputWarnings] = useState<string[]>([]);
   const [legalGateOk, setLegalGateOk] = useState(false);
+  const [browserContext, setBrowserContext] = useState<{
+    isXInAppBrowser: boolean;
+    currentUrl: string;
+  }>({
+    isXInAppBrowser: false,
+    currentUrl: "",
+  });
   const [result, setResult] = useState<{
     situation_analysis: string;
     morning_action: string;
@@ -130,6 +138,17 @@ export default function AppPage() {
     if (variant && variant.trim()) {
       setLpVariant(variant.trim().toLowerCase());
     }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // X アプリ内ブラウザは Google ログインのポリシーで弾かれやすいため先に検知する。
+    const ua = window.navigator.userAgent;
+    const isXInAppBrowser = /Twitter|X-Client|x-app/i.test(ua);
+    setBrowserContext({
+      isXInAppBrowser,
+      currentUrl: window.location.href,
+    });
   }, []);
 
   // 初月検証用: app閲覧と翌日再訪（同一ブラウザ内）を PostHog に送る。
@@ -227,6 +246,12 @@ export default function AppPage() {
 
   const handleGoogleSignIn = async () => {
     setError("");
+    if (browserContext.isXInAppBrowser) {
+      setError(
+        "Xアプリ内ブラウザではGoogleログインがブロックされる場合があります。右上メニューからSafari/Chromeで開いてからログインしてください。"
+      );
+      return;
+    }
     try {
       const auth = getFirebaseAuth();
       const provider = new GoogleAuthProvider();
@@ -256,6 +281,18 @@ export default function AppPage() {
     } catch {
       setCopyState("fail");
       window.setTimeout(() => setCopyState("idle"), 4000);
+    }
+  };
+
+  const handleCopyEntryUrl = async () => {
+    if (!browserContext.currentUrl) return;
+    try {
+      await navigator.clipboard.writeText(browserContext.currentUrl);
+      setEntryUrlCopied("ok");
+      window.setTimeout(() => setEntryUrlCopied("idle"), 2000);
+    } catch {
+      setEntryUrlCopied("fail");
+      window.setTimeout(() => setEntryUrlCopied("idle"), 4000);
     }
   };
 
@@ -407,30 +444,60 @@ export default function AppPage() {
             {authInitError}
           </p>
         ) : (
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            {user ? (
-              <>
-                <span className="text-sm text-slate-600 dark:text-slate-300">
-                  ログイン中: {user.email ?? user.uid}
-                </span>
+          <>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              {user ? (
+                <>
+                  <span className="text-sm text-slate-600 dark:text-slate-300">
+                    ログイン中: {user.email ?? user.uid}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleSignOut}
+                    className="cursor-pointer select-none rounded-full border border-slate-300 px-4 py-2 text-sm text-slate-800 shadow-sm transition-shadow duration-150 hover:bg-slate-100 hover:shadow active:translate-y-px active:shadow-inner dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    ログアウト
+                  </button>
+                </>
+              ) : (
                 <button
                   type="button"
-                  onClick={handleSignOut}
-                  className="cursor-pointer select-none rounded-full border border-slate-300 px-4 py-2 text-sm text-slate-800 shadow-sm transition-shadow duration-150 hover:bg-slate-100 hover:shadow active:translate-y-px active:shadow-inner dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                  onClick={handleGoogleSignIn}
+                  className="cursor-pointer select-none rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-md transition-shadow duration-150 hover:bg-slate-800 hover:shadow-lg active:translate-y-px active:shadow-inner dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
                 >
-                  ログアウト
+                  Googleでログイン
                 </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={handleGoogleSignIn}
-                className="cursor-pointer select-none rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-md transition-shadow duration-150 hover:bg-slate-800 hover:shadow-lg active:translate-y-px active:shadow-inner dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
-              >
-                Googleでログイン
-              </button>
-            )}
-          </div>
+              )}
+            </div>
+            {browserContext.isXInAppBrowser && !user ? (
+              <div className="mt-3 rounded-2xl border border-amber-300/90 bg-amber-50 px-4 py-4 text-sm text-amber-950 dark:border-amber-800/80 dark:bg-amber-950/30 dark:text-amber-100/95">
+                <p className="font-semibold">
+                  Xアプリ内ブラウザでは、Googleログインがブロックされる場合があります。
+                </p>
+                <p className="mt-2 leading-relaxed">
+                  お手数ですが、右上メニューから
+                  <span className="font-semibold"> Safari / Chromeで開く </span>
+                  を選んでからログインしてください。
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCopyEntryUrl}
+                    className="cursor-pointer select-none rounded-full border border-amber-400/80 bg-white px-4 py-2 text-xs font-medium text-amber-950 shadow-sm transition-all duration-150 hover:shadow-md active:translate-y-px active:shadow-inner dark:bg-amber-950/20 dark:text-amber-100"
+                  >
+                    このページURLをコピー
+                  </button>
+                  <span className="text-xs text-amber-900/90 dark:text-amber-100/80">
+                    {entryUrlCopied === "ok"
+                      ? "URLをコピーしました。"
+                      : entryUrlCopied === "fail"
+                        ? "コピーできなかったため、URL欄から共有してください。"
+                        : "外部ブラウザに貼り付けて開けます。"}
+                  </span>
+                </div>
+              </div>
+            ) : null}
+          </>
         )}
         <div className="mt-6 grid gap-3 md:grid-cols-3">
           {SCENES.map((scene) => (
