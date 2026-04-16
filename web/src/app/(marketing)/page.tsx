@@ -153,13 +153,6 @@ export default function Home() {
         <span className="ml-2 text-[11px] text-slate-400 dark:text-slate-500">
           ※B/Dは noindex で一時停止中
         </span>
-        {" · "}
-        <Link
-          href="/kpi-template"
-          className="text-cyan-600 underline hover:text-cyan-700 dark:text-cyan-400 dark:hover:text-cyan-300"
-        >
-          KPIテンプレを見る
-        </Link>
       </p>
     </main>
   );

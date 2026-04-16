@@ -104,7 +104,8 @@ export const LP_VARIANTS: Record<LpVariantId, LpVariantContent> = {
   },
   c: {
     id: "c",
-    badgeLabel: "C案 — Slack・呼び出し",
+    /** ヒーロー直上のバッジは出さない（見出しで訴求する） */
+    badgeLabel: "",
     badgeClassName: "bg-lime-100 text-lime-900 dark:bg-lime-950/50 dark:text-lime-100",
     metaTitle: "MIKATA | Slack呼び出しの夜に（検証LP C）",
     metaDescription:

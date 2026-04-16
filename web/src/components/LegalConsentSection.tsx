@@ -195,7 +195,7 @@ export function LegalConsentSection({
                 <button
                   type="button"
                   onClick={() => setLegalModal(null)}
-                  className="rounded-full border border-slate-300 px-3 py-1.5 text-xs text-slate-800 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                  className="cursor-pointer select-none rounded-full border border-slate-300 px-3 py-1.5 text-xs text-slate-800 shadow-sm transition-all duration-150 hover:bg-slate-100 active:translate-y-px active:shadow-inner dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
                   閉じる
                 </button>
@@ -231,7 +231,7 @@ export function LegalConsentSection({
         <button
           type="button"
           onClick={() => openLegalModal("privacy")}
-          className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+          className={`cursor-pointer select-none rounded-full border px-3 py-1.5 text-xs font-medium shadow-sm transition-all duration-150 hover:shadow-md active:scale-[0.98] active:shadow-inner ${
             privacyOpened
               ? "border-emerald-700/80 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"
               : "border-slate-300 text-slate-800 hover:border-cyan-500 hover:text-cyan-800 dark:border-slate-600 dark:text-slate-200 dark:hover:border-cyan-600/60 dark:hover:text-cyan-100"
@@ -243,7 +243,7 @@ export function LegalConsentSection({
         <button
           type="button"
           onClick={() => openLegalModal("terms")}
-          className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+          className={`cursor-pointer select-none rounded-full border px-3 py-1.5 text-xs font-medium shadow-sm transition-all duration-150 hover:shadow-md active:scale-[0.98] active:shadow-inner ${
             termsOpened
               ? "border-emerald-700/80 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"
               : "border-slate-300 text-slate-800 hover:border-cyan-500 hover:text-cyan-800 dark:border-slate-600 dark:text-slate-200 dark:hover:border-cyan-600/60 dark:hover:text-cyan-100"

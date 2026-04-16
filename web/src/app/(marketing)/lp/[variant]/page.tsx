@@ -79,18 +79,22 @@ export default async function LpVariantPage({ params }: PageProps) {
         description={v.metaDescription}
         path={`/lp/${variant}`}
       />
-      <p className="mb-3 flex flex-wrap items-center gap-2">
-        <span
-          className={`inline-block rounded-full px-3 py-1 text-xs font-medium ${v.badgeClassName}`}
-        >
-          {v.badgeLabel}
-        </span>
-        {!isPrimaryTestVariant ? (
-          <span className="inline-block rounded-full border border-slate-300 px-2.5 py-1 text-[11px] text-slate-600 dark:border-slate-700 dark:text-slate-300">
-            noindex（ブログ転用待ち）
-          </span>
-        ) : null}
-      </p>
+      {v.badgeLabel.trim() || !isPrimaryTestVariant ? (
+        <p className="mb-3 flex flex-wrap items-center gap-2">
+          {v.badgeLabel.trim() ? (
+            <span
+              className={`inline-block rounded-full px-3 py-1 text-xs font-medium ${v.badgeClassName}`}
+            >
+              {v.badgeLabel}
+            </span>
+          ) : null}
+          {!isPrimaryTestVariant ? (
+            <span className="inline-block rounded-full border border-slate-300 px-2.5 py-1 text-[11px] text-slate-600 dark:border-slate-700 dark:text-slate-300">
+              noindex（ブログ転用待ち）
+            </span>
+          ) : null}
+        </p>
+      ) : null}
       <p className="text-xs text-slate-500 dark:text-slate-400">
         MIKATA for SaaS Sales
       </p>

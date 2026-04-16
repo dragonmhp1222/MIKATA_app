@@ -132,7 +132,7 @@ export default function AppPage() {
     }
   }, []);
 
-  // 初月KPI用: app閲覧と翌日再訪（同一ブラウザ内）を計測する。
+  // 初月検証用: app閲覧と翌日再訪（同一ブラウザ内）を PostHog に送る。
   useEffect(() => {
     if (!process.env.NEXT_PUBLIC_POSTHOG_KEY || typeof window === "undefined") {
       return;
@@ -416,7 +416,7 @@ export default function AppPage() {
                 <button
                   type="button"
                   onClick={handleSignOut}
-                  className="rounded-full border border-slate-300 px-4 py-2 text-sm text-slate-800 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                  className="cursor-pointer select-none rounded-full border border-slate-300 px-4 py-2 text-sm text-slate-800 shadow-sm transition-shadow duration-150 hover:bg-slate-100 hover:shadow active:translate-y-px active:shadow-inner dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
                   ログアウト
                 </button>
@@ -425,7 +425,7 @@ export default function AppPage() {
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
-                className="rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+                className="cursor-pointer select-none rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-md transition-shadow duration-150 hover:bg-slate-800 hover:shadow-lg active:translate-y-px active:shadow-inner dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
               >
                 Googleでログイン
               </button>
@@ -438,10 +438,10 @@ export default function AppPage() {
               key={scene.id}
               type="button"
               onClick={() => setSceneId(scene.id)}
-              className={`rounded-xl border p-4 text-left ${
+              className={`cursor-pointer select-none rounded-xl border p-4 text-left shadow-sm transition-all duration-150 hover:shadow-md active:translate-y-px active:shadow-inner ${
                 scene.id === sceneId
-                  ? "border-cyan-500 bg-cyan-50 dark:border-cyan-400 dark:bg-cyan-400/10"
-                  : "border-slate-200 bg-white/80 dark:border-slate-700 dark:bg-slate-900/40"
+                  ? "border-cyan-500 bg-cyan-50 ring-2 ring-cyan-400/30 dark:border-cyan-400 dark:bg-cyan-400/10"
+                  : "border-slate-200 bg-white/80 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/40 dark:hover:border-slate-600"
               }`}
             >
               <p className="font-medium text-slate-900 dark:text-slate-100">
@@ -471,7 +471,7 @@ export default function AppPage() {
                 key={tag}
                 type="button"
                 onClick={() => appendToRawNote(tag)}
-                className="rounded-full border border-slate-300 bg-slate-100 px-3 py-1 text-xs text-slate-800 hover:border-cyan-500 hover:text-cyan-800 dark:border-slate-600 dark:bg-slate-950/60 dark:text-slate-200 dark:hover:border-cyan-500/60 dark:hover:text-cyan-100"
+                className="cursor-pointer select-none rounded-full border border-slate-300 bg-slate-100 px-3 py-1 text-xs text-slate-800 shadow-sm transition-transform duration-150 hover:border-cyan-500 hover:text-cyan-800 hover:shadow-md active:scale-95 active:shadow-inner dark:border-slate-600 dark:bg-slate-950/60 dark:text-slate-200 dark:hover:border-cyan-500/60 dark:hover:text-cyan-100"
               >
                 {tag}
               </button>
@@ -531,7 +531,7 @@ export default function AppPage() {
               !!authInitError ||
               (Boolean(user) && !legalGateOk)
             }
-            className="mt-4 rounded-full bg-cyan-400 px-5 py-2 font-semibold text-slate-950 disabled:opacity-60"
+            className="mt-4 cursor-pointer select-none rounded-full bg-cyan-400 px-5 py-2 font-semibold text-slate-950 shadow-md transition-all duration-150 hover:bg-cyan-300 hover:shadow-lg enabled:active:translate-y-px enabled:active:shadow-inner disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? "生成中…" : "カンペを生成する（無料）"}
           </button>
@@ -586,7 +586,7 @@ export default function AppPage() {
                   <button
                     type="button"
                     onClick={handleCopyReport}
-                    className="rounded-full border border-slate-300 px-3 py-1 text-xs text-slate-800 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                    className="cursor-pointer select-none rounded-full border border-slate-300 px-3 py-1 text-xs text-slate-800 shadow-sm transition-all duration-150 hover:bg-slate-100 hover:shadow active:translate-y-px active:shadow-inner dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
                   >
                     {copyState === "ok" ? "コピーしました" : "コピー"}
                   </button>
