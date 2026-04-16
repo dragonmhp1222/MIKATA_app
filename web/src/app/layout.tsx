@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
+import { PostHogProvider } from "@/components/analytics/PostHogProvider";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { THEME_INIT_SCRIPT } from "@/lib/theme-init-script";
 
@@ -17,7 +18,11 @@ const geistMono = Geist_Mono({
   display: "swap",
 });
 
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   // サービス名を明示して検索結果で認識されやすくする。
   title: "MIKATA | 詰められる前に、返し方を作る",
   // SEO向けに、誰向けの何のサービスかを1文で伝える。
@@ -43,7 +48,9 @@ export default function RootLayout({
           strategy="beforeInteractive"
           dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }}
         />
-        <ThemeProvider>{children}</ThemeProvider>
+        <PostHogProvider>
+          <ThemeProvider>{children}</ThemeProvider>
+        </PostHogProvider>
       </body>
     </html>
   );

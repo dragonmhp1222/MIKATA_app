@@ -3,12 +3,14 @@
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import posthog from "posthog-js";
 import { collectAllInputWarnings } from "@/lib/input-sanitize";
 import { GENERATE_CLIENT_TIMEOUT_MS } from "@/lib/generate-limits";
 import { getFirebaseAuth } from "@/lib/firebase-client";
 import { LegalConsentSection } from "@/components/LegalConsentSection";
 import { LegalFooter } from "@/components/LegalFooter";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { AnalyticsEvents } from "@/lib/analytics-events";
 
 // 画面で扱うシーン型を固定する。
 type SceneId = "forecast_meeting" | "ride_along_feedback" | "slack_callout";
@@ -67,6 +69,7 @@ export default function AppPage() {
   const [user, setUser] = useState<User | null>(null);
   const [authInitError, setAuthInitError] = useState<string | null>(null);
   const [sceneId, setSceneId] = useState<SceneId>("forecast_meeting");
+  const [lpVariant, setLpVariant] = useState("direct");
   const [rawNote, setRawNote] = useState("");
   const [managerQuote, setManagerQuote] = useState("");
   const [selfResponse, setSelfResponse] = useState("");
@@ -110,6 +113,52 @@ export default function AppPage() {
     setLegalGateOk(false);
     setResult(null);
   }, []);
+
+  // LP からの流入情報（scene / lp_variant）を初期値に反映する。
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const s = params.get("scene");
+    const variant = params.get("lp_variant");
+    if (
+      s === "forecast_meeting" ||
+      s === "ride_along_feedback" ||
+      s === "slack_callout"
+    ) {
+      setSceneId(s);
+    }
+    if (variant && variant.trim()) {
+      setLpVariant(variant.trim().toLowerCase());
+    }
+  }, []);
+
+  // 初月KPI用: app閲覧と翌日再訪（同一ブラウザ内）を計測する。
+  useEffect(() => {
+    if (!process.env.NEXT_PUBLIC_POSTHOG_KEY || typeof window === "undefined") {
+      return;
+    }
+    const uid = user?.uid ?? "anon";
+    const keySeen = `mikata-last-seen-${uid}`;
+    const keyGenerated = `mikata-last-generate-${uid}`;
+    const today = new Date().toISOString().slice(0, 10);
+    const lastSeen = localStorage.getItem(keySeen);
+    const lastGenerated = localStorage.getItem(keyGenerated);
+
+    posthog.capture(AnalyticsEvents.appView, {
+      lp_variant: lpVariant,
+      scene_id: sceneId,
+      is_logged_in: Boolean(user),
+    });
+
+    if (lastSeen && lastSeen !== today && lastGenerated === lastSeen) {
+      posthog.capture(AnalyticsEvents.nextDayReturn, {
+        lp_variant: lpVariant,
+        days_since_last_seen: 1,
+      });
+    }
+
+    localStorage.setItem(keySeen, today);
+  }, [user?.uid, lpVariant, sceneId, user]);
 
   useEffect(() => {
     const uid = user?.uid ?? null;
@@ -211,6 +260,14 @@ export default function AppPage() {
   };
 
   const handleGenerate = async () => {
+    if (process.env.NEXT_PUBLIC_POSTHOG_KEY) {
+      posthog.capture(AnalyticsEvents.generateClick, {
+        lp_variant: lpVariant,
+        scene_id: sceneId,
+        has_raw_note: Boolean(rawNote.trim()),
+        is_logged_in: Boolean(user),
+      });
+    }
     if (!rawNote.trim()) {
       setError("状況メモを入力してください。");
       return;
@@ -289,10 +346,27 @@ export default function AppPage() {
         input_warnings?: string[];
       };
       setResult(data.ai_output);
+      if (process.env.NEXT_PUBLIC_POSTHOG_KEY) {
+        posthog.capture(AnalyticsEvents.generateSuccess, {
+          lp_variant: lpVariant,
+          scene_id: sceneId,
+        });
+        const uid = user?.uid ?? "anon";
+        const keyGenerated = `mikata-last-generate-${uid}`;
+        const today = new Date().toISOString().slice(0, 10);
+        localStorage.setItem(keyGenerated, today);
+      }
       if (Array.isArray(data.input_warnings) && data.input_warnings.length > 0) {
         setInputWarnings(data.input_warnings);
       }
     } catch (e) {
+      if (process.env.NEXT_PUBLIC_POSTHOG_KEY) {
+        posthog.capture(AnalyticsEvents.generateFailure, {
+          lp_variant: lpVariant,
+          scene_id: sceneId,
+          error_name: e instanceof Error ? e.name : "unknown",
+        });
+      }
       if (e instanceof DOMException && e.name === "AbortError") {
         setError(
           "応答に時間がかかりすぎたため中断しました。Vercel の関数タイムアウトや OpenAI の混雑の可能性があります。しばらくしてから再度お試しください。"

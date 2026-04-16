@@ -1,14 +1,22 @@
 import Link from "next/link";
+import { PostHogCtaLink } from "@/components/analytics/PostHogCtaLink";
+import { PostHogPageView } from "@/components/analytics/PostHogPageView";
+import { AnalyticsEvents } from "@/lib/analytics-events";
 
 export default function Home() {
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-6 py-16 text-slate-900 dark:text-slate-100 md:px-10">
+      <PostHogPageView
+        eventName={AnalyticsEvents.lpView}
+        pageName="lp_main"
+        properties={{ lp_variant: "main", lp_path: "/" }}
+      />
       <section className="rounded-3xl border border-slate-200 bg-slate-100/90 p-8 dark:border-slate-800 dark:bg-slate-900/60 md:p-12">
         <p className="mb-4 inline-block rounded-full border border-slate-300 px-3 py-1 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300">
           MIKATA for SaaS Sales
         </p>
         <h1 className="max-w-3xl text-3xl font-bold leading-tight md:text-5xl">
-          明日、上司に「で、根拠は？」と詰められるのが怖い夜へ。
+          明日、上司に「で、根拠は？」と詰められるのが怖い夜に。
         </h1>
         <p className="mt-4 text-sm text-slate-600 dark:text-slate-300 md:text-base">
           SaaS営業の「怖い明日」を、今夜整理する。
@@ -17,12 +25,14 @@ export default function Home() {
           MIKATAは、そのまま送れる報告文と明日やるべき行動を、今この場で作ります。
         </p>
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-          <a
+          <PostHogCtaLink
+            href="/app?lp_variant=main"
+            eventName={AnalyticsEvents.lpToAppClick}
+            properties={{ lp_variant: "main", cta_position: "hero" }}
             className="rounded-full bg-cyan-400 px-6 py-3 text-center font-semibold text-slate-950 hover:bg-cyan-300"
-            href="/app"
           >
             1営業日1回、無料で試す（JST 4:00リセット）
-          </a>
+          </PostHogCtaLink>
           <a
             className="rounded-full border border-slate-300 px-6 py-3 text-center text-slate-800 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
             href="#scenes"
@@ -31,12 +41,16 @@ export default function Home() {
           </a>
         </div>
         <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
-          <Link href="/blog" className="text-cyan-600 hover:underline dark:text-cyan-400/90">
+          <Link
+            href="/blog"
+            className="text-cyan-600 hover:underline dark:text-cyan-400/90"
+          >
             ブログでヨミ会の準備術を読む
           </Link>
         </p>
         <p className="mt-6 text-xs text-slate-500 dark:text-slate-400">
-          入力内容はAI生成のためOpenAI, LLC（米国）に送信されます。顧客名・企業名・金額などは<strong className="text-slate-900 dark:text-slate-200">必ず伏せ字</strong>
+          入力内容はAI生成のためOpenAI, LLC（米国）に送信されます。顧客名・企業名・金額などは
+          <strong className="text-slate-900 dark:text-slate-200">必ず伏せ字</strong>
           で入力してください（例：A社、顧客X、〇万円）。
         </p>
       </section>
@@ -116,10 +130,37 @@ export default function Home() {
         <p className="mt-2 text-slate-600 dark:text-slate-300">
           Slackの通知音に怯えなくなる、その日まで。
         </p>
+        <PostHogCtaLink
+          href="/app?lp_variant=main"
+          eventName={AnalyticsEvents.lpToAppClick}
+          properties={{ lp_variant: "main", cta_position: "bottom" }}
+          className="mt-6 inline-flex w-full max-w-sm items-center justify-center rounded-full bg-cyan-400 px-6 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300 sm:w-auto"
+        >
+          MIKATAを無料で試す
+        </PostHogCtaLink>
         <p className="mt-4 text-xs text-slate-500 dark:text-slate-500">
           本サービスは医療・心理支援サービスではありません。
         </p>
       </section>
+      <p className="mt-12 border-t border-slate-200 pt-8 text-center text-xs text-slate-500 dark:border-slate-800">
+        ABテストLP:{" "}
+        <Link
+          href="/lp/c"
+          className="text-cyan-600 underline hover:text-cyan-700 dark:text-cyan-400 dark:hover:text-cyan-300"
+        >
+          C（Slack特化）
+        </Link>
+        <span className="ml-2 text-[11px] text-slate-400 dark:text-slate-500">
+          ※B/Dは noindex で一時停止中
+        </span>
+        {" · "}
+        <Link
+          href="/kpi-template"
+          className="text-cyan-600 underline hover:text-cyan-700 dark:text-cyan-400 dark:hover:text-cyan-300"
+        >
+          KPIテンプレを見る
+        </Link>
+      </p>
     </main>
   );
 }

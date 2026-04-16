@@ -1,6 +1,25 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalFooter } from "@/components/LegalFooter";
 import { ThemeToggle } from "@/components/ThemeToggle";
+
+// SNS・検索向け（`opengraph-image.tsx` と文言を揃える）。
+export const metadata: Metadata = {
+  openGraph: {
+    title: "MIKATA | 詰められる前に、返し方を作る",
+    description:
+      "SaaS営業向けに、夜の状況入力から翌朝使える返し方を生成するWebアプリ。",
+    siteName: "MIKATA",
+    locale: "ja_JP",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "MIKATA | 詰められる前に、返し方を作る",
+    description:
+      "SaaS営業向けに、夜の状況入力から翌朝使える返し方を生成するWebアプリ。",
+  },
+};
 
 // LP・ブログ共通のマーケ用シェル（アプリ /app とは UI を分ける）。
 export default function MarketingLayout({
