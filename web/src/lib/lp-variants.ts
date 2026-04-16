@@ -52,7 +52,8 @@ export const LP_VARIANTS: Record<LpVariantId, LpVariantContent> = {
     id: "b",
     badgeLabel: "B案 — 報告・ヨミ会",
     badgeClassName: "bg-sky-100 text-sky-900 dark:bg-sky-950/80 dark:text-sky-100",
-    metaTitle: "MIKATA | ヨミ・進捗報告の夜に（検証LP B）",
+    /** SNS/検索向け（内部ラベルは含めない） */
+    metaTitle: "MIKATA | ヨミ・進捗報告の夜に",
     metaDescription:
       "目標未達・ヨミのズレの夜、報告のたたき台と明日の初手の例を整理。SaaS営業向け。",
     headlineLines: [
@@ -107,7 +108,7 @@ export const LP_VARIANTS: Record<LpVariantId, LpVariantContent> = {
     /** ヒーロー直上のバッジは出さない（見出しで訴求する） */
     badgeLabel: "",
     badgeClassName: "bg-lime-100 text-lime-900 dark:bg-lime-950/50 dark:text-lime-100",
-    metaTitle: "MIKATA | Slack呼び出しの夜に（検証LP C）",
+    metaTitle: "MIKATA | Slack呼び出しの夜に",
     metaDescription:
       "「ちょっといい？」の前に一次回答のたたき台を。冷静な返しの例を準備。SaaS営業向け。",
     headlineLines: [
@@ -167,7 +168,7 @@ export const LP_VARIANTS: Record<LpVariantId, LpVariantContent> = {
     id: "d",
     badgeLabel: "D案 — 同行・フィードバック",
     badgeClassName: "bg-amber-100 text-amber-950 dark:bg-amber-950/40 dark:text-amber-100",
-    metaTitle: "MIKATA | 同行後のフィードバックに（検証LP D）",
+    metaTitle: "MIKATA | 同行後のフィードバックに",
     metaDescription:
       "「何がダメだった？」に答えるたたき台と、明日試せる具体アクションの例。SaaS営業向け。",
     headlineLines: [

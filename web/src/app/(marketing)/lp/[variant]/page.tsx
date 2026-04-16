@@ -19,6 +19,14 @@ const siteOrigin =
   process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ??
   "http://localhost:3000";
 
+// `(marketing)/opengraph-image.tsx` と同じアセット（LP 個別ページはメタだけ上書きするため images を明示しないと og:image が付かず X でプレースホルダになる）。
+const SHARED_OG_IMAGE = {
+  url: "/opengraph-image",
+  width: 1200,
+  height: 630,
+  alt: 'MIKATA — 明日、上司に「で、根拠は？」と詰められるのが怖い夜に。',
+} as const;
+
 export function generateStaticParams() {
   return LP_VARIANT_IDS.map((variant) => ({ variant }));
 }
@@ -45,11 +53,13 @@ export async function generateMetadata({
       locale: "ja_JP",
       siteName: "MIKATA",
       type: "website",
+      images: [SHARED_OG_IMAGE],
     },
     twitter: {
       card: "summary_large_image",
       title: v.metaTitle,
       description: v.metaDescription,
+      images: [SHARED_OG_IMAGE.url],
     },
     robots: {
       index: variant === "c",
