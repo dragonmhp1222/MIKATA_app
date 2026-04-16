@@ -1,0 +1,65 @@
+# Vercel Web Analytics Installation Report
+
+## Summary
+Successfully installed and configured Vercel Web Analytics for the MIKATA Next.js application following the latest official documentation from Vercel.
+
+## Implementation Details
+
+### 1. Framework Identification
+- **Framework**: Next.js 16.2.3 with App Router
+- **Package Manager**: npm (detected from package-lock.json)
+- **Root Layout**: `src/app/layout.tsx`
+
+### 2. Documentation Source
+Fetched the latest installation instructions from the official Vercel documentation:
+- URL: https://vercel.com/docs/analytics/quickstart
+- Date: April 16, 2026
+- Instructions followed: Next.js App Router specific implementation
+
+### 3. Package Installation
+- **Installed**: `@vercel/analytics` version 2.0.1
+- **Command used**: `npm install @vercel/analytics`
+- **Lock file updated**: package-lock.json (721 packages added/audited)
+
+### 4. Code Changes
+
+#### Modified Files:
+1. **web/package.json**
+   - Added `"@vercel/analytics": "^2.0.1"` to dependencies
+
+2. **web/src/app/layout.tsx**
+   - Added import: `import { Analytics } from "@vercel/analytics/next";`
+   - Added `<Analytics />` component at the end of the `<body>` tag
+   - Placement: After the PostHogProvider and ThemeProvider components, ensuring it doesn't interfere with existing analytics
+
+### 5. Verification Steps Completed
+✅ Linter passed with no errors (`npm run lint`)
+✅ Build completed successfully (`npm run build`)
+✅ TypeScript compilation successful
+✅ Static page generation working (16/16 pages generated)
+✅ No conflicts with existing analytics (PostHog)
+
+### 6. Integration Details
+- The Analytics component was placed at the end of the body tag, following Vercel's recommended practice
+- Used the Next.js-specific import path (`@vercel/analytics/next`) for optimal integration with Next.js App Router
+- The component will automatically track page views and collect analytics data once deployed to Vercel
+
+## Next Steps for the User
+1. Deploy the application to Vercel using `vercel deploy`
+2. Navigate to the Vercel project dashboard
+3. Go to the Analytics section
+4. Click "Enable" to activate Web Analytics
+5. Analytics data will start collecting automatically after deployment
+
+## Testing
+To verify the installation is working after deployment:
+1. Open browser DevTools (Network tab)
+2. Navigate through the site
+3. Look for a Fetch/XHR request to a path like `/<unique-path>/view`
+4. This confirms that analytics events are being sent
+
+## Notes
+- The Analytics component is lightweight and won't impact page performance
+- It works seamlessly with the existing PostHog analytics integration
+- No additional configuration is required in the code
+- Analytics will only be active in production environments when deployed to Vercel
