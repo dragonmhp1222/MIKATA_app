@@ -12,12 +12,14 @@ export const metadata: Metadata = {
     siteName: "MIKATA",
     locale: "ja_JP",
     type: "website",
+    images: [{ url: "/api/og", width: 1200, height: 630 }],
   },
   twitter: {
     card: "summary_large_image",
     title: "MIKATA | 詰められる前に、返し方を作る",
     description:
       "SaaS営業向けに、夜の状況入力から翌朝使える返し方を生成するWebアプリ。",
+    images: ["/api/og"],
   },
 };
 
