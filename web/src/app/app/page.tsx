@@ -560,7 +560,7 @@ export default function AppPage() {
           <section className="mt-4 rounded-2xl border border-cyan-300 bg-cyan-50/80 p-4 dark:border-cyan-900/70 dark:bg-cyan-950/25">
             <div className="flex items-center justify-between gap-3">
               <p className="text-sm font-semibold text-cyan-900 dark:text-cyan-100">
-                初回30秒ガイド（離脱しにくい最短ルート）
+                MIKATAの使い方ガイド（30秒）
               </p>
               <button
                 type="button"

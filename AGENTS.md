@@ -33,6 +33,11 @@
 - Never pass raw Firestore docs directly to UI; map into domain-shaped data first.
 - Keep prompt templates and JSON schema centralized (not scattered in components).
 
+## Writing & Copy Rules
+- コミットメッセージは日本語で記述する。
+- サイト内の文言は常にユーザー向けを前提にし、開発者向けの説明口調を避ける。
+- UIコピーは不自然な直訳を避け、短く具体的で理解しやすい表現を優先する。
+
 ## AI Output Contract (MVP)
 - Must return JSON only.
 - Required keys:
