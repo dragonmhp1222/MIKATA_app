@@ -6,6 +6,7 @@ import { PostHogProvider } from "@/components/analytics/PostHogProvider";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { THEME_INIT_SCRIPT } from "@/lib/theme-init-script";
 import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -53,6 +54,7 @@ export default function RootLayout({
           <ThemeProvider>{children}</ThemeProvider>
         </PostHogProvider>
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
