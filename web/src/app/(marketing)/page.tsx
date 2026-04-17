@@ -75,10 +75,7 @@ export default function Home() {
         </article>
       </section>
       <section className="mt-8 rounded-2xl border border-slate-200 bg-white/90 p-6 dark:border-slate-800 dark:bg-slate-900/40">
-        <h3 className="text-lg font-semibold">はじめての30秒ウォークスルー</h3>
-        <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-          「価値が分かる前に離脱」を防ぐため、使う順番を先に見せます。
-        </p>
+        <h3 className="text-lg font-semibold">MIKATAの使い方ガイド（30秒）</h3>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <article className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/40">
             <p className="text-xs text-slate-500">STEP 1</p>
