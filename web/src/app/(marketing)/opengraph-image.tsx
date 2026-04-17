@@ -57,6 +57,8 @@ export default async function Image() {
           </span>
           <div
             style={{
+              display: "flex",
+              flexDirection: "column",
               fontSize: 58,
               fontWeight: 700,
               lineHeight: 1.2,
@@ -134,7 +136,14 @@ export default async function Image() {
               ③ 「ちょっといい？」Slack呼び出し
             </div>
             <div style={{ fontSize: 14, color: "#94a3b8" }}>出力されるもの</div>
-            <div style={{ fontSize: 16, color: "#f8fafc" }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                fontSize: 16,
+                color: "#f8fafc",
+              }}
+            >
               ・今の状況
               <br />
               ・明日やること
