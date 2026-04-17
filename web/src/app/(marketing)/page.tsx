@@ -75,6 +75,35 @@ export default function Home() {
         </article>
       </section>
       <section className="mt-8 rounded-2xl border border-slate-200 bg-white/90 p-6 dark:border-slate-800 dark:bg-slate-900/40">
+        <h3 className="text-lg font-semibold">はじめての30秒ウォークスルー</h3>
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+          「価値が分かる前に離脱」を防ぐため、使う順番を先に見せます。
+        </p>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <article className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/40">
+            <p className="text-xs text-slate-500">STEP 1</p>
+            <p className="mt-1 text-sm font-medium">シーンを1つ選ぶ</p>
+            <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+              ヨミ会/同行/Slackの3択。迷ったらSlackを推奨。
+            </p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/40">
+            <p className="text-xs text-slate-500">STEP 2</p>
+            <p className="mt-1 text-sm font-medium">タグを2つ押して補足</p>
+            <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+              0→1入力より、タグ起点の方が早くて精度が安定。
+            </p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/40">
+            <p className="text-xs text-slate-500">STEP 3</p>
+            <p className="mt-1 text-sm font-medium">生成してそのまま送る</p>
+            <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+              翌朝の最初の一言と報告文をその場で準備。
+            </p>
+          </article>
+        </div>
+      </section>
+      <section className="mt-8 rounded-2xl border border-slate-200 bg-white/90 p-6 dark:border-slate-800 dark:bg-slate-900/40">
         <h3 className="text-lg font-semibold">
           よくあるNG報告と、MIKATAが生成する改善例
         </h3>
@@ -143,15 +172,22 @@ export default function Home() {
         </p>
       </section>
       <p className="mt-12 border-t border-slate-200 pt-8 text-center text-xs text-slate-500 dark:border-slate-800">
-        ABテストLP:{" "}
+        検証用LP（Slack訴求）:{" "}
         <Link
           href="/lp/c"
           className="text-cyan-600 underline hover:text-cyan-700 dark:text-cyan-400 dark:hover:text-cyan-300"
         >
-          C（Slack特化）
+          /lp/c
         </Link>
         <span className="ml-2 text-[11px] text-slate-400 dark:text-slate-500">
-          ※B/Dは noindex で一時停止中
+          ※ヨミ会・同行フィードバックの詳細は
+          <Link
+            href="/blog"
+            className="text-cyan-600 underline hover:text-cyan-700 dark:text-cyan-400 dark:hover:text-cyan-300"
+          >
+            ブログ
+          </Link>
+          へ
         </span>
       </p>
     </main>

@@ -20,6 +20,10 @@ import {
 // 画面で扱うシーン型を固定する。
 type SceneId = "forecast_meeting" | "ride_along_feedback" | "slack_callout";
 
+type GeneratePhase = "idle" | "auth" | "ai" | "formatting" | "done";
+
+const ONBOARDING_DISMISSED_KEY = "mikata-onboarding-dismissed-v1";
+
 // シーン選択肢を1か所で管理する（LPの①②③説明と揃える）。
 const SCENES: Array<{ id: SceneId; title: string; description: string }> = [
   {
@@ -87,6 +91,9 @@ export default function AppPage() {
   const [entryUrlCopied, setEntryUrlCopied] = useState<"idle" | "ok" | "fail">("idle");
   const [inputWarnings, setInputWarnings] = useState<string[]>([]);
   const [legalGateOk, setLegalGateOk] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [generatePhase, setGeneratePhase] = useState<GeneratePhase>("idle");
+  const [generateElapsedMs, setGenerateElapsedMs] = useState(0);
   const [browserContext, setBrowserContext] = useState<{
     isXInAppBrowser: boolean;
     currentUrl: string;
@@ -109,6 +116,14 @@ export default function AppPage() {
   );
 
   const quickTagsForScene = QUICK_TAGS[sceneId];
+  const generateProgress = useMemo(() => {
+    if (!loading) return 0;
+    if (generatePhase === "auth") return 15;
+    if (generatePhase === "ai") return Math.min(85, 35 + Math.floor(generateElapsedMs / 250));
+    if (generatePhase === "formatting") return 92;
+    if (generatePhase === "done") return 100;
+    return 5;
+  }, [generateElapsedMs, generatePhase, loading]);
 
   const handleLegalGateChange = useCallback((ok: boolean) => {
     setLegalGateOk(ok);
@@ -116,6 +131,7 @@ export default function AppPage() {
 
   // 直前の uid（初回は undefined）。未ログイン→初ログインではフォームを消さず、ログアウト／アカウント切替だけ消す。
   const prevAuthUidRef = useRef<string | null | undefined>(undefined);
+  const slowHintTrackedRef = useRef(false);
 
   const resetSessionFormForNewViewer = useCallback(() => {
     setSceneId("forecast_meeting");
@@ -158,6 +174,19 @@ export default function AppPage() {
       }
     }
     setAnalyticsReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const dismissed = window.localStorage.getItem(ONBOARDING_DISMISSED_KEY);
+    if (!dismissed) {
+      setShowOnboarding(true);
+      if (process.env.NEXT_PUBLIC_POSTHOG_KEY) {
+        posthog.capture(AnalyticsEvents.onboardingShown, {
+          source: "app",
+        });
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -265,6 +294,18 @@ export default function AppPage() {
     return () => unsubscribe?.();
   }, []);
 
+  useEffect(() => {
+    if (!loading) {
+      setGenerateElapsedMs(0);
+      return;
+    }
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      setGenerateElapsedMs(Date.now() - startedAt);
+    }, 200);
+    return () => window.clearInterval(timer);
+  }, [loading]);
+
   const appendToRawNote = (line: string) => {
     setRawNote((prev) => {
       const t = prev.trim();
@@ -325,6 +366,18 @@ export default function AppPage() {
     }
   };
 
+  const handleDismissOnboarding = () => {
+    setShowOnboarding(false);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(ONBOARDING_DISMISSED_KEY, "1");
+    }
+    if (process.env.NEXT_PUBLIC_POSTHOG_KEY) {
+      posthog.capture(AnalyticsEvents.onboardingDismissed, {
+        source: "app",
+      });
+    }
+  };
+
   const handleGenerate = async () => {
     if (process.env.NEXT_PUBLIC_POSTHOG_KEY) {
       posthog.capture(AnalyticsEvents.generateClick, {
@@ -351,6 +404,8 @@ export default function AppPage() {
       );
       return;
     }
+    setGeneratePhase("auth");
+    slowHintTrackedRef.current = false;
     setLoading(true);
     setInputWarnings(
       collectAllInputWarnings({
@@ -361,6 +416,8 @@ export default function AppPage() {
     );
     try {
       const idToken = await user.getIdToken();
+      const fetchStartedAt = performance.now();
+      setGeneratePhase("ai");
       const controller = new AbortController();
       const timeoutMs = GENERATE_CLIENT_TIMEOUT_MS;
       const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
@@ -403,6 +460,7 @@ export default function AppPage() {
         throw new Error(msg);
       }
       const data = (await response.json()) as {
+        session_id?: string;
         ai_output: {
           situation_analysis: string;
           morning_action: string;
@@ -412,13 +470,23 @@ export default function AppPage() {
           fallback_reply?: string;
         };
         input_warnings?: string[];
+        metrics?: {
+          wall_clock_ms: number;
+          openai_attempts: number;
+        };
       };
+      setGeneratePhase("formatting");
       setResult(data.ai_output);
+      const clientGenerateMs = Math.round(performance.now() - fetchStartedAt);
       if (process.env.NEXT_PUBLIC_POSTHOG_KEY) {
         posthog.capture(AnalyticsEvents.generateSuccess, {
           lp_variant: lpVariant,
           lp_variant_source: lpVariantSource,
           scene_id: sceneId,
+          session_id: data.session_id,
+          client_generate_duration_ms: clientGenerateMs,
+          server_wall_clock_ms: data.metrics?.wall_clock_ms,
+          openai_attempts: data.metrics?.openai_attempts,
         });
         const uid = user?.uid ?? "anon";
         const keyGenerated = `mikata-last-generate-${uid}`;
@@ -447,9 +515,25 @@ export default function AppPage() {
         );
       }
     } finally {
+      setGeneratePhase("done");
       setLoading(false);
+      window.setTimeout(() => setGeneratePhase("idle"), 900);
     }
   };
+
+  useEffect(() => {
+    if (!loading) return;
+    if (generateElapsedMs < 8000) return;
+    if (slowHintTrackedRef.current) return;
+    slowHintTrackedRef.current = true;
+    if (process.env.NEXT_PUBLIC_POSTHOG_KEY) {
+      posthog.capture(AnalyticsEvents.generateSlowHintShown, {
+        scene_id: sceneId,
+        lp_variant: lpVariant,
+        lp_variant_source: lpVariantSource,
+      });
+    }
+  }, [generateElapsedMs, loading, lpVariant, lpVariantSource, sceneId]);
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
@@ -472,6 +556,36 @@ export default function AppPage() {
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
           シーン3択→状況入力→カンペ生成の順で進めます。
         </p>
+        {showOnboarding ? (
+          <section className="mt-4 rounded-2xl border border-cyan-300 bg-cyan-50/80 p-4 dark:border-cyan-900/70 dark:bg-cyan-950/25">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-cyan-900 dark:text-cyan-100">
+                初回30秒ガイド（離脱しにくい最短ルート）
+              </p>
+              <button
+                type="button"
+                onClick={handleDismissOnboarding}
+                className="rounded-full border border-cyan-300 px-3 py-1 text-xs text-cyan-900 hover:bg-cyan-100 dark:border-cyan-800 dark:text-cyan-100 dark:hover:bg-cyan-900/40"
+              >
+                閉じる
+              </button>
+            </div>
+            <ol className="mt-3 grid gap-2 text-xs text-cyan-950 dark:text-cyan-100/90 md:grid-cols-3">
+              <li className="rounded-xl bg-white/80 p-3 dark:bg-slate-900/40">
+                <p className="font-semibold">1) シーンを1つ選ぶ</p>
+                <p className="mt-1">迷ったら「Slack呼び出し」から始めると早いです。</p>
+              </li>
+              <li className="rounded-xl bg-white/80 p-3 dark:bg-slate-900/40">
+                <p className="font-semibold">2) クイックタグを2つ押す</p>
+                <p className="mt-1">空欄から書くより、タグ追記の方が精度が安定します。</p>
+              </li>
+              <li className="rounded-xl bg-white/80 p-3 dark:bg-slate-900/40">
+                <p className="font-semibold">3) 生成してそのままコピー</p>
+                <p className="mt-1">明日の最初の一言と報告文をすぐ持っていけます。</p>
+              </li>
+            </ol>
+          </section>
+        ) : null}
         {authInitError ? (
           <p className="mt-4 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
             {authInitError}
@@ -635,6 +749,29 @@ export default function AppPage() {
           >
             {loading ? "生成中…" : "カンペを生成する（無料）"}
           </button>
+          {loading ? (
+            <div className="mt-3 rounded-xl border border-cyan-200 bg-cyan-50/70 px-3 py-3 dark:border-cyan-900/50 dark:bg-cyan-950/20">
+              <p className="text-xs font-medium text-cyan-900 dark:text-cyan-100">
+                {generatePhase === "auth" && "認証を確認しています…"}
+                {generatePhase === "ai" && "AIがカンペを生成中です…"}
+                {generatePhase === "formatting" && "出力を整形しています…"}
+              </p>
+              <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-cyan-100 dark:bg-cyan-900/40">
+                <div
+                  className="h-full rounded-full bg-cyan-500 transition-all duration-300"
+                  style={{ width: `${generateProgress}%` }}
+                />
+              </div>
+              <p className="mt-1 text-[11px] text-cyan-900/80 dark:text-cyan-100/80">
+                経過: {(generateElapsedMs / 1000).toFixed(1)}秒
+              </p>
+              {generateElapsedMs >= 8000 ? (
+                <p className="mt-1 text-[11px] text-cyan-900/80 dark:text-cyan-100/80">
+                  混雑時は時間がかかることがあります。先に「最初にこれだけ言えばOK」から使うと実務が進めやすいです。
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           {error ? (
             <p className="mt-3 text-sm text-rose-700 dark:text-rose-300">{error}</p>
           ) : null}
@@ -652,7 +789,9 @@ export default function AppPage() {
             </p>
             <div className="mt-4 border-b border-slate-200 pb-4 dark:border-slate-800">
               <p className="text-base font-medium text-slate-900 dark:text-slate-100">
-                正直、こういう状況しんどいですよね。
+                {result.empathy_line?.trim()
+                  ? result.empathy_line
+                  : "正直、こういう状況しんどいですよね。"}
               </p>
               <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                 MIKATAは業務上の準備を助けるツールです。

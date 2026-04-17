@@ -60,6 +60,27 @@ export function collectFieldWarnings(label: string, text: string): string[] {
 /**
  * 3入力をまとめて警告を集約（同種は1本に畳めるほどではないのでそのまま列挙）。
  */
+/**
+ * 曖昧語の多用など、生成品質を落としやすいパターンへの軽い注意（MVP・完璧な検知ではない）。
+ */
+export function collectVagueLanguageWarnings(text: string): string[] {
+  const warnings: string[] = [];
+  const t = text.trim();
+  if (!t) return warnings;
+  const kmoe = t.match(/かもしれない|かもしれません/g);
+  if (kmoe && kmoe.length >= 3) {
+    warnings.push(
+      "状況メモで「かもしれない」が繰り返されています。事実・期限・次の確認日を一言足すと、カンペが具体になりやすいです。"
+    );
+  }
+  if (/^(頑張ります|検討します)[。!！?？\s]*$/u.test(t)) {
+    warnings.push(
+      "状況メモが短いだけの場合、上司視点では根拠が弱く見えがちです。止まっている案件名（伏せ字）と次アクションを1行足してください。"
+    );
+  }
+  return warnings;
+}
+
 export function collectAllInputWarnings(input: {
   raw_note: string;
   manager_quote: string;
@@ -69,6 +90,7 @@ export function collectAllInputWarnings(input: {
     ...collectFieldWarnings("状況メモ", input.raw_note),
     ...collectFieldWarnings("上司のセリフ", input.manager_quote),
     ...collectFieldWarnings("自分の返答", input.self_response),
+    ...collectVagueLanguageWarnings(input.raw_note),
   ];
 }
 

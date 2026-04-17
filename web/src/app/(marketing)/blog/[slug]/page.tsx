@@ -31,6 +31,13 @@ export async function generateMetadata({
       description: fm.ogDescription ?? description,
       type: "article",
       publishedTime: fm.date,
+      images: [{ url: "/opengraph-image.png", width: 1200, height: 630 }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: fm.ogTitle ?? title,
+      description: fm.ogDescription ?? description,
+      images: ["/opengraph-image.png"],
     },
   };
 }

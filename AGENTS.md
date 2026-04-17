@@ -29,6 +29,7 @@
 
 ## Architecture Rules
 - Keep `(marketing)` and `(app)` routes separated.
+- **Marketing LP の方針（現状）**: 公開する訴求LPは **トップ `/`（通常LP）** と **`/lp/c`（Slack呼び出し訴求の検証用）** のみ。旧 **`/lp/b`・`/lp/d`** はメンテ対象外とし、**対応するブログ記事へ 301 リダイレクト**する（`next.config.ts` の `redirects`）。ヨミ会・同行など訴求の長文は **ブログ** で更新し、LPは短い面に集約する。
 - Never pass raw Firestore docs directly to UI; map into domain-shaped data first.
 - Keep prompt templates and JSON schema centralized (not scattered in components).
 

@@ -10,7 +10,6 @@ import {
   isLpVariantId,
   LP_VARIANT_IDS,
   LP_VARIANTS,
-  type LpVariantId,
 } from "@/lib/lp-variants";
 
 type PageProps = { params: Promise<{ variant: string }> };
@@ -74,7 +73,6 @@ export default async function LpVariantPage({ params }: PageProps) {
   }
   const v = LP_VARIANTS[variant];
   const appHref = `/app?scene=${encodeURIComponent(v.sceneQuery)}&lp_variant=${variant}`;
-  const isPrimaryTestVariant = variant === "c";
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-6 py-12 text-slate-900 dark:text-slate-100 md:px-10 md:py-16">
@@ -88,22 +86,6 @@ export default async function LpVariantPage({ params }: PageProps) {
         description={v.metaDescription}
         path={`/lp/${variant}`}
       />
-      {v.badgeLabel.trim() || !isPrimaryTestVariant ? (
-        <p className="mb-3 flex flex-wrap items-center gap-2">
-          {v.badgeLabel.trim() ? (
-            <span
-              className={`inline-block rounded-full px-3 py-1 text-xs font-medium ${v.badgeClassName}`}
-            >
-              {v.badgeLabel}
-            </span>
-          ) : null}
-          {!isPrimaryTestVariant ? (
-            <span className="inline-block rounded-full border border-slate-300 px-2.5 py-1 text-[11px] text-slate-600 dark:border-slate-700 dark:text-slate-300">
-              noindex（ブログ転用待ち）
-            </span>
-          ) : null}
-        </p>
-      ) : null}
       <p className="text-xs text-slate-500 dark:text-slate-400">
         MIKATA for SaaS Sales
       </p>
@@ -248,29 +230,22 @@ export default async function LpVariantPage({ params }: PageProps) {
           トップ（通常LP）へ
         </Link>
         {" · "}
-        <VariantNav current={v.id} />
+        <LpFooterNav />
       </p>
     </main>
   );
 }
 
-function VariantNav({ current }: { current: LpVariantId }) {
-  const others = LP_VARIANT_IDS.filter((id) => id !== current && id === "c");
-  if (others.length === 0) return null;
+function LpFooterNav() {
   return (
     <span>
-      ABテストLP:{" "}
-      {others.map((id, i) => (
-        <span key={id}>
-          {i > 0 ? " · " : null}
-          <Link
-            href={`/lp/${id}`}
-            className="text-cyan-600 underline hover:text-cyan-700 dark:text-cyan-400 dark:hover:text-cyan-300"
-          >
-            {id.toUpperCase()}
-          </Link>
-        </span>
-      ))}
+      詳しい訴求別の読み物は{" "}
+      <Link
+        href="/blog"
+        className="text-cyan-600 underline hover:text-cyan-700 dark:text-cyan-400 dark:hover:text-cyan-300"
+      >
+        ブログ
+      </Link>
     </span>
   );
 }

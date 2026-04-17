@@ -18,6 +18,8 @@ export const maxDuration = 120;
 const GENERATION_TEMPERATURE = 0.3;
 // JSON/Zod 失敗時は同じ入力でもう1回だけ再試行する。
 const MAX_GENERATION_ATTEMPTS = 2;
+// 長すぎる出力を抑え、待ち時間のブレを減らす。
+const MAX_OUTPUT_TOKENS = 420;
 
 // OpenAIクライアントを必要時に生成してビルド時評価を避ける。
 function getOpenAiClient() {
@@ -88,6 +90,7 @@ function getBearerToken(req: Request): string | null {
 // 生成APIのPOSTハンドラ。
 export async function POST(req: Request) {
   try {
+    const wallClockStart = Date.now();
     // 本番で未設定だと OpenAI 呼び出しで落ちるため、早めに明示的に返す。
     if (!process.env.OPENAI_API_KEY?.trim()) {
       return NextResponse.json(
@@ -193,11 +196,14 @@ export async function POST(req: Request) {
     // OpenAI を最大2回まで呼び、空・JSON 崩れ・Zod 不一致のときだけ再試行する。
     let output: z.infer<typeof aiOutputSchema> | null = null;
     let lastFailureResponse: NextResponse | null = null;
+    let openaiAttempts = 0;
 
     for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS; attempt++) {
+      openaiAttempts = attempt + 1;
       const response = await client.responses.create({
         model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
         temperature: GENERATION_TEMPERATURE,
+        max_output_tokens: MAX_OUTPUT_TOKENS,
         text: { format: { type: "json_object" } },
         input: [
           {
@@ -263,6 +269,15 @@ export async function POST(req: Request) {
       );
     }
 
+    const openaiModel = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+    const wallClockMs = Date.now() - wallClockStart;
+    // 原因切り分け用（ユーザー本文は出さない）。
+    console.info("[api/generate] ok", {
+      wall_clock_ms: wallClockMs,
+      openai_attempts: openaiAttempts,
+      openai_model: openaiModel,
+    });
+
     // セッションを保存する。
     const sessionRef = db.collection("sessions").doc();
     // Firestoreに保存する。
@@ -283,6 +298,12 @@ export async function POST(req: Request) {
       ai_output: output,
       // 初期状態では未実行にする。
       execution_result: { is_executed: false },
+      // 計測（P1: 遅さの主因切り分け用。個人情報は含めない）。
+      metrics: {
+        wall_clock_ms: wallClockMs,
+        openai_attempts: openaiAttempts,
+        openai_model: openaiModel,
+      },
       // 作成時刻を保存する。
       created_at: new Date(),
       // 更新時刻を保存する。
@@ -294,6 +315,10 @@ export async function POST(req: Request) {
       session_id: sessionRef.id,
       ai_output: output,
       input_warnings: inputWarnings,
+      metrics: {
+        wall_clock_ms: wallClockMs,
+        openai_attempts: openaiAttempts,
+      },
     });
   } catch (error) {
     // ユーザー文面はログに出さず、原因調査用にメッセージのみ（Vercel の Functions ログで確認可能）。

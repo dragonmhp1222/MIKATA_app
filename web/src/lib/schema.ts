@@ -28,8 +28,8 @@ export const aiOutputSchema = z.object({
   morning_action: z.string().min(20).max(120),
   // そのまま使える文面は必須にする。
   copy_paste_text: z.string().min(30).max(300),
-  // 共感文は任意にして過度な文量を避ける。
-  empathy_line: z.string().max(80).optional(),
+  // 共感文は任意。長文化して主役（copy/morning）を食わないよう短く抑える。
+  empathy_line: z.string().max(60).optional(),
   // バッドニュースファースト1文は任意にする。
   bad_news_first_line: z.string().max(120).optional(),
   // 予備返答は任意にする。
