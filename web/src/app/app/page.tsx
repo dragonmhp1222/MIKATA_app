@@ -11,6 +11,11 @@ import { LegalConsentSection } from "@/components/LegalConsentSection";
 import { LegalFooter } from "@/components/LegalFooter";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { AnalyticsEvents } from "@/lib/analytics-events";
+import {
+  readStoredLpVariant,
+  writeStoredLpVariant,
+  type LpVariantSource,
+} from "@/lib/lp-variant-session";
 
 // 画面で扱うシーン型を固定する。
 type SceneId = "forecast_meeting" | "ride_along_feedback" | "slack_callout";
@@ -70,6 +75,9 @@ export default function AppPage() {
   const [authInitError, setAuthInitError] = useState<string | null>(null);
   const [sceneId, setSceneId] = useState<SceneId>("forecast_meeting");
   const [lpVariant, setLpVariant] = useState("direct");
+  const [lpVariantSource, setLpVariantSource] =
+    useState<LpVariantSource>("default");
+  const [analyticsReady, setAnalyticsReady] = useState(false);
   const [rawNote, setRawNote] = useState("");
   const [managerQuote, setManagerQuote] = useState("");
   const [selfResponse, setSelfResponse] = useState("");
@@ -122,12 +130,11 @@ export default function AppPage() {
     setResult(null);
   }, []);
 
-  // LP からの流入情報（scene / lp_variant）を初期値に反映する。
+  // LP からの流入情報（scene / lp_variant）を初期値に反映する。URL優先、なければ同一タブ内の直近LP閲覧（sessionStorage）。
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const s = params.get("scene");
-    const variant = params.get("lp_variant");
     if (
       s === "forecast_meeting" ||
       s === "ride_along_feedback" ||
@@ -135,9 +142,22 @@ export default function AppPage() {
     ) {
       setSceneId(s);
     }
-    if (variant && variant.trim()) {
-      setLpVariant(variant.trim().toLowerCase());
+    const variant = params.get("lp_variant")?.trim().toLowerCase();
+    if (variant) {
+      writeStoredLpVariant(variant);
+      setLpVariant(variant);
+      setLpVariantSource("url");
+    } else {
+      const stored = readStoredLpVariant();
+      if (stored) {
+        setLpVariant(stored);
+        setLpVariantSource("session");
+      } else {
+        setLpVariant("direct");
+        setLpVariantSource("default");
+      }
     }
+    setAnalyticsReady(true);
   }, []);
 
   useEffect(() => {
@@ -156,6 +176,7 @@ export default function AppPage() {
     if (!process.env.NEXT_PUBLIC_POSTHOG_KEY || typeof window === "undefined") {
       return;
     }
+    if (!analyticsReady) return;
     const uid = user?.uid ?? "anon";
     const keySeen = `mikata-last-seen-${uid}`;
     const keyGenerated = `mikata-last-generate-${uid}`;
@@ -163,21 +184,29 @@ export default function AppPage() {
     const lastSeen = localStorage.getItem(keySeen);
     const lastGenerated = localStorage.getItem(keyGenerated);
 
+    const isXInAppBrowser = /Twitter|X-Client|x-app/i.test(
+      window.navigator.userAgent
+    );
+
     posthog.capture(AnalyticsEvents.appView, {
       lp_variant: lpVariant,
+      lp_variant_source: lpVariantSource,
+      url_had_lp_variant: lpVariantSource === "url",
       scene_id: sceneId,
       is_logged_in: Boolean(user),
+      is_x_in_app_browser: isXInAppBrowser,
     });
 
     if (lastSeen && lastSeen !== today && lastGenerated === lastSeen) {
       posthog.capture(AnalyticsEvents.nextDayReturn, {
         lp_variant: lpVariant,
+        lp_variant_source: lpVariantSource,
         days_since_last_seen: 1,
       });
     }
 
     localStorage.setItem(keySeen, today);
-  }, [user?.uid, lpVariant, sceneId, user]);
+  }, [analyticsReady, user?.uid, lpVariant, lpVariantSource, sceneId, user]);
 
   useEffect(() => {
     const uid = user?.uid ?? null;
@@ -300,9 +329,11 @@ export default function AppPage() {
     if (process.env.NEXT_PUBLIC_POSTHOG_KEY) {
       posthog.capture(AnalyticsEvents.generateClick, {
         lp_variant: lpVariant,
+        lp_variant_source: lpVariantSource,
         scene_id: sceneId,
         has_raw_note: Boolean(rawNote.trim()),
         is_logged_in: Boolean(user),
+        legal_gate_ok: legalGateOk,
       });
     }
     if (!rawNote.trim()) {
@@ -386,6 +417,7 @@ export default function AppPage() {
       if (process.env.NEXT_PUBLIC_POSTHOG_KEY) {
         posthog.capture(AnalyticsEvents.generateSuccess, {
           lp_variant: lpVariant,
+          lp_variant_source: lpVariantSource,
           scene_id: sceneId,
         });
         const uid = user?.uid ?? "anon";
@@ -400,6 +432,7 @@ export default function AppPage() {
       if (process.env.NEXT_PUBLIC_POSTHOG_KEY) {
         posthog.capture(AnalyticsEvents.generateFailure, {
           lp_variant: lpVariant,
+          lp_variant_source: lpVariantSource,
           scene_id: sceneId,
           error_name: e instanceof Error ? e.name : "unknown",
         });

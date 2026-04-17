@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import posthog from "posthog-js";
+import { writeStoredLpVariant } from "@/lib/lp-variant-session";
 
 type Props = {
   eventName?: string;
@@ -17,6 +18,10 @@ export function PostHogPageView({
 }: Props) {
   useEffect(() => {
     if (!process.env.NEXT_PUBLIC_POSTHOG_KEY) return;
+    const lp = properties?.lp_variant;
+    if (typeof lp === "string" && lp.trim()) {
+      writeStoredLpVariant(lp);
+    }
     posthog.capture(eventName, {
       page_name: pageName,
       path: window.location.pathname,

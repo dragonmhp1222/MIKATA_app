@@ -48,7 +48,7 @@ export default function MarketingLayout({
                 ブログ
               </Link>
               <Link
-                href="/app"
+                href="/app?lp_variant=nav"
                 className="hover:text-slate-900 dark:hover:text-white"
               >
                 アプリ

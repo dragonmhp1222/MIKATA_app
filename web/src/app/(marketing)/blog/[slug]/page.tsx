@@ -129,7 +129,7 @@ export default async function BlogPostPage({ params }: PageProps) {
           状況を入力するだけで、返し方・報告文のたたきを短時間で出せます。
         </p>
         <Link
-          href="/app"
+          href="/app?lp_variant=blog"
           className="mt-4 inline-flex rounded-full bg-cyan-400 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
         >
           MIKATA で無料で準備する
